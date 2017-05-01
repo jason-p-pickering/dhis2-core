@@ -27,9 +27,75 @@ package org.hisp.dhis.webapi.controller;
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import org.hisp.dhis.common.DhisApiVersion;
+import org.hisp.dhis.system.scheduling.Scheduler;
+import org.hisp.dhis.validation.ValidationResult;
+import org.hisp.dhis.validation.ValidationResultService;
+import org.hisp.dhis.validation.notification.ValidationResultNotificationTask;
+import org.hisp.dhis.validation.scheduling.MonitoringTask;
+import org.hisp.dhis.webapi.mvc.annotation.ApiVersion;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
 /**
  * @author Stian Sandvold
  */
+@Controller
+@RequestMapping( "/testing" )
+@ApiVersion( { DhisApiVersion.ALL, DhisApiVersion.DEFAULT } )
 public class Testing
 {
+
+    @Autowired
+    Scheduler scheduler;
+
+    @Autowired
+    MonitoringTask monitoringTask;
+
+    @Autowired
+    ValidationResultNotificationTask validationResultNotificationTask;
+
+    @Autowired
+    ValidationResultService validationResultService;
+
+    @RequestMapping( value = "/runValidation", method = RequestMethod.GET )
+    @ResponseStatus( value = HttpStatus.NO_CONTENT )
+    public void testRunScheduledValidationAnalysis()
+    {
+        scheduler.executeTask( monitoringTask );
+    }
+
+    @RequestMapping( value = "/sendValidationResults", method = RequestMethod.GET )
+    public
+    @ResponseBody
+    List<ValidationResult> restRunSendValidationResults()
+    {
+        List<ValidationResult> unsendt = validationResultService.getAllUnReportedValidationResults();
+
+        scheduler.executeTask( validationResultNotificationTask );
+
+        List<ValidationResult> still_unsendt = validationResultService.getAllUnReportedValidationResults();
+        unsendt.removeAll( still_unsendt );
+
+        return unsendt;
+    }
+
+    @RequestMapping( value = "/getValidationResults", method = RequestMethod.GET )
+    public
+    @ResponseBody
+    List<ValidationResult> getValidationResults( @RequestParam boolean includeSent )
+    {
+        if ( includeSent )
+        {
+            return validationResultService.getAllValidationResults();
+        }
+        else
+        {
+            return validationResultService.getAllUnReportedValidationResults();
+        }
+    }
 }
