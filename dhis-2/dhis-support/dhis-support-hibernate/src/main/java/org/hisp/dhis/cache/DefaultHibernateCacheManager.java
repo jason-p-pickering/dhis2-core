@@ -30,6 +30,15 @@ package org.hisp.dhis.cache;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.hisp.dhis.external.conf.ConfigurationKey;
+import org.hisp.dhis.external.conf.DhisConfigurationProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import net.spy.memcached.MemcachedClient;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.InetSocketAddress;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -52,6 +61,9 @@ public class DefaultHibernateCacheManager
     {
         this.sessionFactory = sessionFactory;
     }
+    
+    @Autowired
+    private DhisConfigurationProvider config;
 
     // -------------------------------------------------------------------------
     // HibernateCacheManager implementation
@@ -62,6 +74,8 @@ public class DefaultHibernateCacheManager
     {
         sessionFactory.getCache().evictEntityRegions();
         sessionFactory.getCache().evictCollectionRegions();
+        
+        clearMemcachedCache();
      }
     
     @Override
@@ -84,5 +98,39 @@ public class DefaultHibernateCacheManager
     public Statistics getStatistics()
     {
         return sessionFactory.getStatistics();
+    }
+    
+    /**
+     * Clears {@code memcached} cache, given that it has been configured as
+     * application cache.
+     * <p>
+     * TODO This is a terrible hack to work around an issue
+     * with the second level cache provider. Will be removed when fixed there.
+     * <p>
+     * {@linkplain https://github.com/mihaicostin/hibernate-l2-memcached/issues/9}
+     */
+    private void clearMemcachedCache()
+    {
+        if ( config.isMemcachedCacheProviderEnabled() )
+        {
+            getCache().flush();
+        }
+    }
+    
+    private MemcachedClient getCache()
+    {
+        String cacheServers = config.getProperty( ConfigurationKey.CACHE_SERVERS );
+        String[] cacheArray = cacheServers.split( ":" );
+        String url = cacheArray[0];
+        int port = cacheArray.length == 2 ? Integer.parseInt( cacheArray[1] ) : 11211;
+        
+        try
+        {
+            return new MemcachedClient( new InetSocketAddress( url, port ) );
+        }
+        catch( IOException ex )
+        {
+            throw new UncheckedIOException( ex );
+        }
     }
 }

@@ -97,11 +97,11 @@ public class DefaultHibernateConfigurationProvider
     // Dependencies
     // -------------------------------------------------------------------------
 
-    private DhisConfigurationProvider configurationProvider;
+    private DhisConfigurationProvider configProvider;
 
-    public void setConfigurationProvider( DhisConfigurationProvider configurationProvider )
+    public void setConfigProvider( DhisConfigurationProvider configProvider )
     {
-        this.configurationProvider = configurationProvider;
+        this.configProvider = configProvider;
     }
 
     // -------------------------------------------------------------------------
@@ -168,11 +168,11 @@ public class DefaultHibernateConfigurationProvider
         {
             try
             {
-                Properties fileProperties = configurationProvider.getProperties();
+                Properties fileProperties = configProvider.getProperties();
                 
                 mapToHibernateProperties( fileProperties );
 
-                if ( configurationProvider.isReadOnlyMode() )
+                if ( configProvider.isReadOnlyMode() )
                 {
                     fileProperties.setProperty( Environment.HBM2DDL_AUTO, "validate" );
                     
@@ -191,7 +191,7 @@ public class DefaultHibernateConfigurationProvider
         // Second-level cache
         // ---------------------------------------------------------------------
         
-        if ( configurationProvider.isMemcachedCacheProviderEnabled() )
+        if ( configProvider.isMemcachedCacheProviderEnabled() )
         {
             setMemcachedCacheProvider( config );
             
@@ -202,7 +202,7 @@ public class DefaultHibernateConfigurationProvider
         // Handle cache replication
         // ---------------------------------------------------------------------
         
-        if ( configurationProvider.isClusterEnabled() )
+        if ( configProvider.isClusterEnabled() )
         {
             config.setProperty( "net.sf.ehcache.configurationResourceName", FILENAME_EHCACHE_REPLICATION );
             
@@ -327,8 +327,8 @@ public class DefaultHibernateConfigurationProvider
         config.setProperty( PROP_MEMCACHED_CONNECTION_FACTORY, "KetamaConnectionFactory" );
         config.setProperty( PROP_MEMCACHED_OPERATION_TIMEOUT, "5000" );
         config.setProperty( PROP_MEMCACHED_HASH_ALGORITHM, "HashAlgorithm.FNV1_64_HASH" );
-        config.setProperty( PROP_MEMCACHED_SERVERS, configurationProvider.getProperty( ConfigurationKey.CACHE_SERVERS ) );
-        config.setProperty( PROP_MEMCACHED_CACHE_TIME_SECONDS, configurationProvider.getProperty( ConfigurationKey.CACHE_TIME ) );
+        config.setProperty( PROP_MEMCACHED_SERVERS, configProvider.getProperty( ConfigurationKey.CACHE_SERVERS ) );
+        config.setProperty( PROP_MEMCACHED_CACHE_TIME_SECONDS, configProvider.getProperty( ConfigurationKey.CACHE_TIME ) );
     }
     
     /**
@@ -337,10 +337,10 @@ public class DefaultHibernateConfigurationProvider
      */
     private void setCacheReplicationConfigSystemProperties()
     {
-        String instanceHost = configurationProvider.getProperty( ConfigurationKey.CLUSTER_INSTANCE_HOSTNAME );
-        String instancePort = configurationProvider.getProperty( ConfigurationKey.CLUSTER_INSTANCE_CACHE_PORT );
+        String instanceHost = configProvider.getProperty( ConfigurationKey.CLUSTER_INSTANCE_HOSTNAME );
+        String instancePort = configProvider.getProperty( ConfigurationKey.CLUSTER_INSTANCE_CACHE_PORT );
         
-        Properties dhisProps = configurationProvider.getProperties();
+        Properties dhisProps = configProvider.getProperties();
         
         List<String> cacheNames = getCacheNames();
         
