@@ -55,6 +55,8 @@ public class OrganisationUnitGroup
 
     private Set<OrganisationUnitGroupSet> groupSets = new HashSet<>();
 
+    private CoordinatesTuple coordinatesTuple;
+
     // -------------------------------------------------------------------------
     // Constructors
     // -------------------------------------------------------------------------
@@ -168,5 +170,15 @@ public class OrganisationUnitGroup
     public void setGroupSets( Set<OrganisationUnitGroupSet> groupSets )
     {
         this.groupSets = groupSets;
+    }
+
+    public CoordinatesTuple getCoordinatesTuple()
+    {
+        return coordinatesTuple;
+    }
+
+    public void setCoordinatesTuple( CoordinatesTuple coordinatesTuple )
+    {
+        this.coordinatesTuple = coordinatesTuple;
     }
 }
