@@ -44,7 +44,6 @@ import org.hisp.dhis.validation.ValidationService;
 import org.hisp.dhis.validation.comparator.ValidationResultComparator;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -198,7 +197,16 @@ public class RunValidationAction
 
         DataElementCategoryOptionCombo attributeOptionCombo = attributeOptionComboId == null || attributeOptionComboId == -1 ? null : dataElementCategoryService.getDataElementCategoryOptionCombo( attributeOptionComboId );
 
-        log.info( "Validating data for " + ( group == null ? "all rules" : "group: " + group.getName() ) );
+        log.info( String.format(
+            "Custom validation process was initiated with the following criteria:" +
+                "\n\tRoot OrganisationUnit: %s" +
+                "\n\tValidationRuleGroup: %s" +
+                "\n\tFrom %s to %s\n",
+            organisationUnit.getDisplayName(),
+            group == null ? "All rules" : group.getDisplayName(),
+            startDate,
+            endDate
+        ) );
 
         validationResults = new ArrayList<>( validationService.startInteractiveValidationAnalysis( format.parseDate( startDate ), format.parseDate( endDate ),
                 organisationUnits, attributeOptionCombo, group, sendNotifications, format ) );

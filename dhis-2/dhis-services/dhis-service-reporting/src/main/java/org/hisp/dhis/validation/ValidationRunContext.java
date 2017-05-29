@@ -27,6 +27,7 @@ package org.hisp.dhis.validation;
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import com.google.common.base.MoreObjects;
 import org.apache.commons.lang3.Validate;
 import org.hisp.dhis.common.DimensionalItemObject;
 import org.hisp.dhis.dataelement.CategoryOptionGroup;
@@ -260,5 +261,14 @@ public class ValidationRunContext
             this.context.persistResults = persistResults;
             return this;
         }
+    }
+
+    public String paramsToString()
+    {
+        return MoreObjects.toStringHelper( this )
+            .add( "maxResults", maxResults )
+            .add( "sendNotifications", sendNotifications )
+            .add( "persistResults", persistResults )
+            .toString();
     }
 }

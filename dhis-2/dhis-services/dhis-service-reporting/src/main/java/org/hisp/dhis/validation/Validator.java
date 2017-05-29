@@ -28,9 +28,13 @@ package org.hisp.dhis.validation;
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-import org.hisp.dhis.dataelement.DataElementCategoryService;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.hisp.dhis.commons.util.SystemUtils;
+import org.hisp.dhis.dataelement.DataElementCategoryService;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
+import org.hisp.dhis.system.util.Clock;
+import org.hisp.dhis.system.util.MathUtils;
 import org.springframework.context.ApplicationContext;
 
 import java.util.Collection;
@@ -40,27 +44,37 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Evaluates validation rules.
- * 
+ *
  * @author Jim Grace
  */
 public class Validator
 {
+    private static final Log log = LogFactory.getLog( Validator.class );
+
     /**
      * Evaluates validation rules for a collection of organisation units. This
      * method breaks the job down by organisation unit. It assigns the
      * evaluation for each organisation unit to a task that can be evaluated
      * independently in a multi-threaded environment.
-     * 
+     *
      * @return a collection of any validations that were found
      */
-    public static Collection<ValidationResult> validate( ValidationRunContext context, 
+    public static Collection<ValidationResult> validate( ValidationRunContext context,
         ApplicationContext applicationContext )
     {
         DataElementCategoryService categoryService = (DataElementCategoryService)
             applicationContext.getBean( DataElementCategoryService.class );
-                
+
         int threadPoolSize = getThreadPoolSize( context );
+
         ExecutorService executor = Executors.newFixedThreadPool( threadPoolSize );
+
+        Collection<ValidationResult> results = context.getValidationResults();
+
+        Clock clock = new Clock( log ).startClock().logTime( "Validation process started" );
+
+        log.debug(
+            String.format( "Process initialized with the following parameters:\n%s", context.paramsToString() ) );
 
         for ( OrganisationUnit orgUnit : context.getOrgUnits() )
         {
@@ -69,6 +83,10 @@ public class Validator
 
             executor.execute( task );
         }
+
+        clock.logTime( String
+            .format( "Scheduled %s validation tasks running on %s threads", context.getOrgUnits().size(),
+                threadPoolSize ) );
 
         executor.shutdown();
 
@@ -80,33 +98,25 @@ public class Validator
         {
             executor.shutdownNow();
         }
+        finally
+        {
+            clock.logTime( String.format( "Validation process finished with %s results found", results.size() ) );
+        }
 
-        reloadAttributeOptionCombos( context.getValidationResults(), categoryService );
+        reloadAttributeOptionCombos( results, categoryService );
 
-        return context.getValidationResults();
+        return results;
     }
 
     /**
      * Determines how many threads we should use for testing validation rules.
-     * 
+     *
      * @param context validation run context
      * @return number of threads we should use for testing validation rules
      */
     private static int getThreadPoolSize( ValidationRunContext context )
     {
-        int threadPoolSize = SystemUtils.getCpuCores();
-
-        if ( threadPoolSize > 2 )
-        {
-            threadPoolSize--;
-        }
-
-        if ( threadPoolSize > context.getCountOfSourcesToValidate() )
-        {
-            threadPoolSize = context.getCountOfSourcesToValidate();
-        }
-
-	return threadPoolSize;
+        return MathUtils.getWithin( (SystemUtils.getCpuCores() - 1), 1, context.getCountOfSourcesToValidate() );
     }
 
     /**

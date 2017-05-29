@@ -42,7 +42,6 @@ import org.hisp.dhis.dataelement.DataElementOperand;
 import org.hisp.dhis.datavalue.DataValueService;
 import org.hisp.dhis.expression.Expression;
 import org.hisp.dhis.expression.ExpressionService;
-import org.hisp.dhis.expression.Operator;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
 import org.hisp.dhis.period.Period;
 import org.hisp.dhis.period.PeriodService;
@@ -53,8 +52,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
-import static org.hisp.dhis.expression.MissingValueStrategy.NEVER_SKIP;
-import static org.hisp.dhis.system.util.MathUtils.*;
+import static org.hisp.dhis.system.util.MathUtils.roundSignificant;
+import static org.hisp.dhis.system.util.MathUtils.zeroIfNull;
 
 /**
  * Runs a validation task on a thread within a multi-threaded validation run.
@@ -120,129 +119,103 @@ public class DataValidationTask
 
     private void runInternal()
     {
+        if ( context.isAnalysisComplete() )
+        {
+            return;
+        }
+
         Set<ValidationResult> validationResults = new HashSet<>();
 
-        if ( !context.isAnalysisComplete() )
+        for ( PeriodTypeExtended periodTypeX : context.getPeriodTypeExtendedMap().values() )
         {
-            for ( PeriodTypeExtended periodTypeX : context.getPeriodTypeExtendedMap().values() )
+            log.trace( "Validation PeriodType " + periodTypeX.getPeriodType().getName() );
+
+            Set<ValidationRuleExtended> ruleXs = getRulesBySourceAndPeriodType( orgUnit, periodTypeX );
+
+            SetMap<String, DataElementOperand> dataElementOperandsToGet = getDataElementOperands( ruleXs );
+
+            if ( !ruleXs.isEmpty() )
             {
-                log.trace("Validation PeriodType " + periodTypeX.getPeriodType().getName() );
-
-                Set<ValidationRuleExtended> ruleXs = getRulesBySourceAndPeriodType( orgUnit, periodTypeX );
-
-                SetMap<String, DataElementOperand> dataElementOperandsToGet = getDataElementOperands( ruleXs );
-
-                if ( !ruleXs.isEmpty() )
+                for ( Period period : periodTypeX.getPeriods() )
                 {
-                    for ( Period period : periodTypeX.getPeriods() )
+                    MapMap<String, DataElementOperand, Date> lastUpdatedMap = new MapMap<>();
+
+                    MapMap<String, DimensionalItemObject, Double> dataValueMap = getDataValueMap(
+                        dataElementOperandsToGet, periodTypeX.getAllowedPeriodTypes(),
+                        period, orgUnit, lastUpdatedMap );
+
+                    MapMap<String, DimensionalItemObject, Double> slidingWindowEventMap = getEventMapForSlidingWindow(
+                        context.getEventItems(), period, orgUnit );
+
+                    slidingWindowEventMap.putMap( dataValueMap );
+
+                    MapMap<String, DimensionalItemObject, Double> eventMap = getEventMap(
+                        context.getEventItems(), period, orgUnit );
+
+                    dataValueMap.putMap( eventMap );
+
+                    log.trace( "OrgUnit " + orgUnit.getName() + " [" + period.getStartDate() + " - "
+                        + period.getEndDate() + "]" + " currentValueMap[" + dataValueMap.size() + "]" );
+
+                    for ( ValidationRuleExtended ruleX : ruleXs )
                     {
-                        MapMap<String, DataElementOperand, Date> lastUpdatedMap = new MapMap<>();
+                        ValidationRule rule = ruleX.getRule();
 
-                        MapMap<String, DimensionalItemObject, Double> dataValueMap = getDataValueMap(
-                            dataElementOperandsToGet, periodTypeX.getAllowedPeriodTypes(),
-                            period, orgUnit, lastUpdatedMap );
+                        log.trace( "Validation rule " + rule.getUid() + " " + rule.getName() );
 
-                        MapMap<String, DimensionalItemObject, Double> slidingWindowEventMap = getEventMapForSlidingWindow(
-                            context.getEventItems(), period, orgUnit );
+                        Map<String, Double> leftSideValues;
 
-                        slidingWindowEventMap.putMap( dataValueMap );
-
-                        MapMap<String, DimensionalItemObject, Double> eventMap = getEventMap(
-                            context.getEventItems(), period, orgUnit );
-
-                        dataValueMap.putMap( eventMap );
-
-                        log.trace( "OrgUnit " + orgUnit.getName() + " [" + period.getStartDate() + " - "
-                            + period.getEndDate() + "]" + " currentValueMap[" + dataValueMap.size() + "]" );
-
-                        for ( ValidationRuleExtended ruleX : ruleXs )
+                        if ( rule.getLeftSide() != null && rule.getLeftSide().getSlidingWindow() )
                         {
-                            ValidationRule rule = ruleX.getRule();
+                            leftSideValues = getExpressionValueMap( rule.getLeftSide(), slidingWindowEventMap,
+                                period );
+                        }
+                        else
+                        {
+                            leftSideValues = getExpressionValueMap( rule.getLeftSide(), dataValueMap, period );
+                        }
 
-                            log.trace("Validation rule " + rule.getUid() + " " + rule.getName() );
+                        Map<String, Double> rightSideValues;
 
-                            Map<String, Double> leftSideValues;
+                        if ( rule.getRightSide() != null && rule.getRightSide().getSlidingWindow() )
+                        {
+                            rightSideValues = getExpressionValueMap( rule.getRightSide(), slidingWindowEventMap,
+                                period );
+                        }
+                        else
+                        {
+                            rightSideValues = getExpressionValueMap( rule.getRightSide(), dataValueMap, period );
+                        }
 
-                            if ( rule.getLeftSide() != null && rule.getLeftSide().getSlidingWindow() )
+                        Set<String> attributeOptionCombos = Sets.newHashSet( leftSideValues.keySet() );
+                        attributeOptionCombos.addAll( rightSideValues.keySet() );
+
+                        for ( String optionCombo : attributeOptionCombos )
+                        {
+                            log.trace( "Validation attributeOptionCombo " + optionCombo );
+
+                            Double leftSide = leftSideValues.get( optionCombo );
+                            Double rightSide = rightSideValues.get( optionCombo );
+
+                            boolean violation = ValidationUtils.evaluateValidationRule( leftSide, rightSide, rule );
+
+                            if ( violation )
                             {
-                                leftSideValues = getExpressionValueMap( rule.getLeftSide(), slidingWindowEventMap,
-                                    period );
-                            }
-                            else
-                            {
-                                leftSideValues = getExpressionValueMap( rule.getLeftSide(), dataValueMap, period );
-                            }
-
-                            Map<String, Double> rightSideValues;
-
-                            if ( rule.getRightSide() != null && rule.getRightSide().getSlidingWindow() )
-                            {
-                                rightSideValues = getExpressionValueMap( rule.getRightSide(), slidingWindowEventMap,
-                                    period );
-                            }
-                            else
-                            {
-                                rightSideValues = getExpressionValueMap( rule.getRightSide(), dataValueMap, period );
+                                validationResults.add( new ValidationResult(
+                                    rule, period, orgUnit,
+                                    categoryService.getDataElementCategoryOptionCombo( optionCombo ),
+                                    roundSignificant( zeroIfNull( leftSide ) ),
+                                    roundSignificant( zeroIfNull( rightSide ) ),
+                                    periodService.getDayInPeriod( period, new Date() ) ) );
                             }
 
-                            Set<String> attributeOptionCombos = Sets.newHashSet( leftSideValues.keySet() );
-                            attributeOptionCombos.addAll( rightSideValues.keySet() );
+                            log.debug( "Evaluated " + rule.getName() + ", combo id " + optionCombo
+                                + ": " + (violation ? "violation" : "OK") + " "
+                                + (leftSide == null ? "(null)" : leftSide.toString()) + " "
+                                + rule.getOperator() + " "
+                                + (rightSide == null ? "(null)" : rightSide.toString()) + " ("
+                                + context.getValidationResults().size() + " results)" );
 
-                            for ( String optionCombo : attributeOptionCombos )
-                            {
-                                log.trace("Validation attributeOptionCombo " + optionCombo );
-
-                                Double leftSide = leftSideValues.get( optionCombo );
-                                Double rightSide = rightSideValues.get( optionCombo );
-                                boolean violation = false;
-
-                                if ( Operator.compulsory_pair.equals( rule.getOperator() ) )
-                                {
-                                    violation = (leftSide != null && rightSide == null)
-                                        || (leftSide == null && rightSide != null);
-                                }
-                                else if ( Operator.exclusive_pair.equals( rule.getOperator() ) )
-                                {
-                                    violation = (leftSide != null && rightSide != null);
-                                }
-                                else
-                                {
-                                    if ( leftSide == null &&
-                                        rule.getLeftSide().getMissingValueStrategy() == NEVER_SKIP )
-                                    {
-                                        leftSide = 0d;
-                                    }
-
-                                    if ( rightSide == null &&
-                                        rule.getRightSide().getMissingValueStrategy() == NEVER_SKIP )
-                                    {
-                                        rightSide = 0d;
-                                    }
-
-                                    if ( leftSide != null && rightSide != null )
-                                    {
-                                        violation = !expressionIsTrue( leftSide, rule.getOperator(), rightSide );
-                                    }
-                                }
-
-                                if ( violation )
-                                {
-                                    validationResults.add( new ValidationResult(
-                                        rule, period, orgUnit,
-                                        categoryService.getDataElementCategoryOptionCombo( optionCombo ),
-                                        roundSignificant( zeroIfNull( leftSide ) ),
-                                        roundSignificant( zeroIfNull( rightSide ) ),
-                                        periodService.getDayInPeriod( period, new Date() ) ) );
-                                }
-
-                                log.debug( "Evaluated " + rule.getName() + ", combo id " + optionCombo
-                                    + ": " + (violation ? "violation" : "OK") + " "
-                                    + (leftSide == null ? "(null)" : leftSide.toString()) + " "
-                                    + rule.getOperator() + " "
-                                    + (rightSide == null ? "(null)" : rightSide.toString()) + " ("
-                                    + context.getValidationResults().size() + " results)" );
-
-                            }
                         }
                     }
                 }
