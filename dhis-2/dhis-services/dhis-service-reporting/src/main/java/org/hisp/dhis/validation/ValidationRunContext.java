@@ -139,15 +139,6 @@ public class ValidationRunContext
         return persistResults;
     }
 
-    // -------------------------------------------------------------------------
-    // Builder
-    // -------------------------------------------------------------------------
-
-    public static Builder newBuilder()
-    {
-        return new Builder();
-    }
-
     public Queue<ValidationResult> getValidationResults()
     {
         return validationResults;
@@ -156,6 +147,15 @@ public class ValidationRunContext
     public boolean isAnalysisComplete()
     {
         return validationResults.size() >= maxResults;
+    }
+
+    // -------------------------------------------------------------------------
+    // Builder
+    // -------------------------------------------------------------------------
+
+    public static Builder newBuilder()
+    {
+        return new Builder();
     }
 
     public static class Builder
