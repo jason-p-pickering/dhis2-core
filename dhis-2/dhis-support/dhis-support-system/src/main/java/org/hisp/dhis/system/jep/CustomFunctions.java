@@ -40,6 +40,8 @@ import org.nfunk.jep.function.PostfixMathCommandI;
 
 import com.google.common.collect.ImmutableMap;
 
+import static java.util.regex.Pattern.CASE_INSENSITIVE;
+
 /**
  * @author Kenneth Haase
  */
@@ -50,9 +52,9 @@ public class CustomFunctions
         put( "AVG", new ArithmeticMean() ).put( "STDDEV", new StandardDeviation() ).
         put( "MEDIAN", new MedianValue() ).put( "MAX", new MaxValue() ).
         put( "MIN", new MinValue() ).put( "COUNT", new Count() ).
-        put( "VSUM", new VectorSum() ).build();
+        put( "SUM", new VectorSum() ).build();
     
-    public static final Pattern AGGREGATE_PATTERN_PREFIX = Pattern.compile( "(AVG|STDDEV|MEDIAN|MAX|MIN|COUNT|VSUM)\\s*\\(" );
+    public static final Pattern AGGREGATE_PATTERN_PREFIX = Pattern.compile( "(AVG|STDDEV|MEDIAN|MAX|MIN|COUNT|SUM)\\s*\\(", CASE_INSENSITIVE );
 
     public static void addFunctions( JEP parser )
     {        

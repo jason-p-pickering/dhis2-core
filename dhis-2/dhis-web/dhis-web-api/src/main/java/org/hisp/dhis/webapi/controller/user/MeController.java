@@ -34,6 +34,7 @@ import org.hisp.dhis.common.DhisApiVersion;
 import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.dxf2.webmessage.WebMessageException;
 import org.hisp.dhis.dxf2.webmessage.WebMessageUtils;
+import org.hisp.dhis.fieldfilter.FieldFilterParams;
 import org.hisp.dhis.fieldfilter.FieldFilterService;
 import org.hisp.dhis.interpretation.InterpretationService;
 import org.hisp.dhis.message.MessageService;
@@ -59,6 +60,8 @@ import org.hisp.dhis.webapi.mvc.annotation.ApiVersion;
 import org.hisp.dhis.webapi.service.ContextService;
 import org.hisp.dhis.webapi.webdomain.user.Dashboard;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.StringUtils;
@@ -143,9 +146,11 @@ public class MeController
             fields.addAll( Preset.ALL.getFields() );
         }
 
-        CollectionNode collectionNode = fieldFilterService.filter( User.class, Collections.singletonList( currentUser ), fields );
+        CollectionNode collectionNode = fieldFilterService.toCollectionNode( User.class,
+            new FieldFilterParams( Collections.singletonList( currentUser ), fields ) );
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
+        response.setHeader( HttpHeaders.CACHE_CONTROL, CacheControl.noCache().getHeaderValue() );
 
         RootNode rootNode = NodeUtils.createRootNode( collectionNode.getChildren().get( 0 ) );
 
@@ -204,7 +209,8 @@ public class MeController
             fields.addAll( Preset.ALL.getFields() );
         }
 
-        CollectionNode collectionNode = fieldFilterService.filter( User.class, Collections.singletonList( currentUser ), fields );
+        CollectionNode collectionNode = fieldFilterService.toCollectionNode( User.class,
+            new FieldFilterParams( Collections.singletonList( currentUser ), fields ) );
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
         nodeService.serialize( NodeUtils.createRootNode( collectionNode.getChildren().get( 0 ) ), "application/json", response.getOutputStream() );
@@ -221,11 +227,12 @@ public class MeController
         }
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
+        response.setHeader( HttpHeaders.CACHE_CONTROL, CacheControl.noCache().getHeaderValue() );
         renderService.toJson( response.getOutputStream(), currentUser.getUserCredentials().getAllAuthorities() );
     }
 
     @RequestMapping( value = { "/authorization/{authority}", "/authorities/{authority}" } )
-    public void haveAuthority( HttpServletResponse response, @PathVariable String authority ) throws IOException, NotAuthenticatedException
+    public void hasAuthority( HttpServletResponse response, @PathVariable String authority ) throws IOException, NotAuthenticatedException
     {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -237,6 +244,7 @@ public class MeController
         boolean hasAuthority = currentUser.getUserCredentials().isAuthorized( authority );
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
+        response.setHeader( HttpHeaders.CACHE_CONTROL, CacheControl.noCache().getHeaderValue() );
         renderService.toJson( response.getOutputStream(), hasAuthority );
     }
 
@@ -254,6 +262,7 @@ public class MeController
             currentUser, USER_SETTING_NAMES, true );
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
+        response.setHeader( HttpHeaders.CACHE_CONTROL, CacheControl.noCache().getHeaderValue() );
         renderService.toJson( response.getOutputStream(), userSettings );
     }
 
@@ -282,6 +291,7 @@ public class MeController
         }
 
         response.setContentType( MediaType.APPLICATION_JSON_VALUE );
+        response.setHeader( HttpHeaders.CACHE_CONTROL, CacheControl.noCache().getHeaderValue() );
         renderService.toJson( response.getOutputStream(), value );
     }
 
