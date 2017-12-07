@@ -464,6 +464,7 @@ public abstract class PeriodType
      */
     public Period createPeriod( DateInterval dateInterval )
     {
+
         if ( dateInterval == null || dateInterval.getFrom() == null || dateInterval.getTo() == null )
         {
             return null;
@@ -474,7 +475,8 @@ public abstract class PeriodType
         final DateTimeUnit from = cal.toIso( dateInterval.getFrom() );
         final DateTimeUnit to = cal.toIso( dateInterval.getTo() );
 
-        return new Period( this, from.toJdkDate(), to.toJdkDate(), getIsoDate( from ) );
+        return new Period( this, from.toJdkDate(), to.toJdkDate(), cal.name() == "persian" ? getIsoDate( dateInterval.getFrom() ) : getIsoDate( from ));
+
     }
 
     /**
