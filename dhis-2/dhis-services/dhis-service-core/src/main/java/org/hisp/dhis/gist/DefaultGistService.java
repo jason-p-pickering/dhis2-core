@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,9 +40,13 @@ import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import javax.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Session;
@@ -99,7 +103,17 @@ public class DefaultGistService implements GistService {
   public GistObjectList exportObjectList(@Nonnull GistQuery query) {
     GistQuery planned = plan(query);
     Stream<Object[]> values = gist(planned);
-    return new GistObjectList(pager(query), properties(planned), values);
+    if (!query.isPaging()) {
+      return new GistObjectList(pager(query, true), properties(planned), values);
+    }
+    // peek the first row so an empty page can never claim to have a nextPage;
+    // hasNext() only caches the row, it does not discard it for the later iteration
+    Iterator<Object[]> rows = values.iterator();
+    boolean hasRows = rows.hasNext();
+    Stream<Object[]> lookahead =
+        StreamSupport.stream(Spliterators.spliteratorUnknownSize(rows, Spliterator.ORDERED), false)
+            .onClose(values::close);
+    return new GistObjectList(pager(query, hasRows), properties(planned), lookahead);
   }
 
   @Nonnull
@@ -179,7 +193,7 @@ public class DefaultGistService implements GistService {
     return queryBuilder.transform(rows);
   }
 
-  private GistPager pager(GistQuery query) {
+  private GistPager pager(GistQuery query, boolean hasRows) {
     if (!query.isPaging()) return null;
     int page = 1 + (query.getPageOffset() / query.getPageSize());
     Schema schema = schemaService.getSchema(query.getElementType());
@@ -204,7 +218,7 @@ public class DefaultGistService implements GistService {
                 .toString();
       }
       Integer pageCount = GistPager.getPageCount(total, query.getPageSize());
-      if (pageCount == null || pageCount > page) {
+      if (hasRows && (pageCount == null || pageCount > page)) {
         next =
             UriComponentsBuilder.fromUri(queryURI)
                 .replaceQueryParam("page", page + 1)
