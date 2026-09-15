@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -112,5 +112,41 @@ class AnalyticsCacheTest {
     assertEquals(2, optCachedGrid.get().getHeaderWidth());
 
     assertEquals(2, optCachedGrid.get().getRows().size());
+  }
+
+  @Test
+  void modifyingAReturnedGridDoesNotAffectTheCachedEntry() {
+    // arrange
+    AnalyticsCacheSettings settings = new AnalyticsCacheSettings(systemSettingManager);
+
+    CacheBuilder<Grid> cacheBuilder = new SimpleCacheBuilder<>();
+
+    cacheBuilder.expireAfterWrite(1L, TimeUnit.MINUTES);
+
+    Cache<Grid> cache = new LocalCache<>(cacheBuilder);
+
+    Mockito.<Cache<Grid>>when(cacheProvider.createAnalyticsCache()).thenReturn(cache);
+
+    AnalyticsCache analyticsCache = new AnalyticsCache(cacheProvider, settings);
+
+    Grid grid = new ListGrid();
+    grid.addHeader(new GridHeader("Header1")).addRow().addValue("Value11");
+
+    DataQueryParams params =
+        DataQueryParams.newBuilder()
+            .withDataElements(List.of(new DataElement("dataElementA")))
+            .build();
+
+    analyticsCache.put(params.getKey(), grid, 60);
+
+    // act: mutate the grid returned by a first get() call
+    Grid firstRead = analyticsCache.get(params.getKey()).orElseThrow();
+    firstRead.addHeader(new GridHeader("Header2")).addRow().addValue("Value21");
+
+    // assert: a second get() call must be unaffected by that mutation
+    Grid secondRead = analyticsCache.get(params.getKey()).orElseThrow();
+
+    assertEquals(1, secondRead.getHeaderWidth());
+    assertEquals(1, secondRead.getRows().size());
   }
 }
