@@ -53,6 +53,14 @@ import org.springframework.stereotype.Component;
  * DataEntryStore} interface, not the concrete class. Resolving the interface-typed bean here and
  * unwrapping it via {@link AopProxyUtils#getSingletonTarget} works around that.
  *
+ * <p>An alternative was considered: {@code DefaultCacheProvider.handleCacheInvalidationEvent}
+ * already provides a {@code Region}-keyed cache-invalidation channel via a plain Spring {@code
+ * ApplicationEvent} ({@code CacheInvalidationEvent(source, Region)}), used elsewhere by {@code
+ * SharingController}, which would have avoided needing the proxy-unwrap above entirely. Direct
+ * method invalidation was kept instead: it is more directly traceable from write to invalidation
+ * than an extra event hop, and this listener is already same-node-only, so there is no cross-node
+ * dispatch need that the event channel would otherwise help with.
+ *
  * @author Jason P. Pickering <jason@dhis2.org>
  */
 @Component

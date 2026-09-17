@@ -89,10 +89,6 @@ class HibernateDataEntryStoreDefaultCocTest extends PostgresIntegrationTestBase 
     UID defaultCoc = dataEntryStore.getDefaultCategoryOptionCombo();
 
     assertEquals("nonCanonDf1", defaultCoc.getValue());
-
-    // restore, since this is shared bootstrap data other tests may depend on
-    canonical.setName("default");
-    categoryService.updateCategoryOptionCombo(canonical);
   }
 
   /**

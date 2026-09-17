@@ -107,6 +107,9 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
    */
   private static final String DEFAULT_COC_CANONICAL_UID = "HllvX50cXC0";
 
+  /** Single-entry cache key used with {@link #defaultCocCache}. */
+  private static final String DEFAULT_COC_CACHE_KEY = "default";
+
   private final Cache<DefaultCoc> defaultCocCache;
 
   private final Cache<Set<String>> cocsByCategoryComboCache;
@@ -357,6 +360,7 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
 
   @Nonnull
   @Override
+  @UsageTestOnly
   public UID getDefaultCategoryOptionCombo() {
     return getDefaultCategoryOptionComboUid();
   }
@@ -476,7 +480,8 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
         JOIN dataelement de ON de.dataelementid = dse.dataelementid
         JOIN dataset ds ON ds.datasetid = dse.datasetid
         WHERE ds.uid = :ds
-          AND de.uid = :de""";
+          AND de.uid = :de
+        LIMIT 1""";
     List<?> rows =
         createNativeRawQuery(sql)
             .setParameter("ds", dataSet.getValue())
@@ -1014,7 +1019,7 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
   }
 
   private DefaultCoc getDefaultCoc() {
-    return defaultCocCache.get("default", key -> resolveDefaultCoc());
+    return defaultCocCache.get(DEFAULT_COC_CACHE_KEY, key -> resolveDefaultCoc());
   }
 
   private DefaultCoc resolveDefaultCoc() {

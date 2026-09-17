@@ -58,11 +58,23 @@ import org.hisp.dhis.category.CategoryOptionCombo;
  * writes that go through Hibernate's per-entity save/update/delete lifecycle. A bulk native-SQL
  * write to {@code categorycombos_optioncombos} or {@code categoryoptioncombo}, or a bulk HQL {@code
  * UPDATE}, would bypass it entirely and silently stale both caches until their TTL expires. As of
- * this class's introduction, no such path exists for this specific relationship — verified by
- * auditing every category-combo/COC merge, metadata-import, and Liquibase code path in this
- * codebase. However, the general pattern of bypassing Hibernate events via bulk native SQL with
- * manual L2-cache sync does already exist elsewhere in this codebase for adjacent relationships
- * (see {@code HibernateCategoryComboStore.updateCatComboCategoryRefs} and {@code
+ * this class's introduction, no such path exists for this specific relationship in production code
+ * — verified by auditing every category-combo/COC merge, metadata-import, and Liquibase code path
+ * in this codebase. A bypass does exist, but only in test-harness code: {@code
+ * HibernateDbmsManager.emptyDatabase()} calls {@code emptyTable("categorycombos_optioncombos")} and
+ * {@code emptyTable("categoryoptioncombo")}, each a bulk {@code DELETE} via {@code JdbcTemplate}
+ * with no Hibernate events raised, so this listener never sees it. This runs after every test
+ * method in the {@code cache-test} profile (see {@code SpringIntegrationTestExtension.tearDown},
+ * PER_METHOD lifecycle, non-{@code @Transactional}), which leaves both caches holding ids of rows
+ * that no longer exist. This self-heals rather than causing cross-test staleness only because the
+ * next test method's startup routine ({@code DefaultCategoryService.generateDefaultDimension})
+ * re-creates the default COC through Hibernate ({@code categoryService.addCategoryOptionCombo(...)}
+ * ), which fires a {@code PostCommitInsertEvent} and invalidates the stale entries before anything
+ * reads them. If that startup re-seed step were ever skipped, or changed to a bulk-SQL insert
+ * instead of going through Hibernate, the caches would go stale across test methods. However, the
+ * general pattern of bypassing Hibernate events via bulk native SQL with manual L2-cache sync does
+ * already exist elsewhere in this codebase, in production code, for adjacent relationships (see
+ * {@code HibernateCategoryComboStore.updateCatComboCategoryRefs} and {@code
  * HibernateCategoryStore.removeCatOptionCategoryRefs}, both used by Category-merge on different
  * join tables). If a similar bulk-reassignment path is ever added for {@code
  * CategoryOptionCombo.categoryCombo} specifically, this listener will not catch it and will need a
@@ -117,11 +129,6 @@ public class DataEntryCacheInvalidationListener
   @Override
   public boolean requiresPostCommitHanding(EntityPersister persister) {
     return true;
-  }
-
-  @Override
-  public boolean requiresPostCommitHandling(EntityPersister persister) {
-    return PostCommitUpdateEventListener.super.requiresPostCommitHandling(persister);
   }
 
   @Override

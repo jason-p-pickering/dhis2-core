@@ -156,9 +156,15 @@ public interface DataEntryStore {
    * the well-known canonical UID is preferred, which protects against a known production
    * data-quality issue where a second, non-canonical row is also named {@code 'default'}.
    *
+   * <p>A production consumer of this method (a per-distinct-data-element default-COC resolution,
+   * replacing a currently-uncached lookup) is being introduced separately and is not part of this
+   * branch, so whoever merges this branch and a future branch that also touches this method should
+   * be aware there may be a small merge overlap here.
+   *
    * @return the UID of the default category option combo
    */
   @Nonnull
+  @UsageTestOnly
   UID getDefaultCategoryOptionCombo();
 
   /**
