@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,6 +58,8 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import org.hibernate.Session;
 import org.hibernate.query.NativeQuery;
+import org.hisp.dhis.cache.Cache;
+import org.hisp.dhis.cache.CacheProvider;
 import org.hisp.dhis.common.DateRange;
 import org.hisp.dhis.common.DbName;
 import org.hisp.dhis.common.IdProperty;
@@ -97,13 +99,25 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
    */
   private static final int MAX_ROWS_PER_INSERT = 500;
 
+  /**
+   * The canonical UID of the bootstrap-seeded "default" category option combo. Preferred over a
+   * {@code name = 'default'} lookup since production databases have been observed to contain a
+   * second, non-canonical row also named "default" (a data-quality issue), which makes a name-only
+   * lookup ambiguous.
+   */
+  private static final String DEFAULT_COC_CANONICAL_UID = "HllvX50cXC0";
+
+  private final Cache<DefaultCoc> defaultCocCache;
+
   public HibernateDataEntryStore(
       EntityManager entityManager,
       PeriodStore periodStore,
       JdbcTemplate jdbcTemplate,
-      ApplicationEventPublisher publisher) {
+      ApplicationEventPublisher publisher,
+      CacheProvider cacheProvider) {
     super(entityManager, jdbcTemplate, publisher, DataValue.class, false);
     this.periodStore = periodStore;
+    this.defaultCocCache = cacheProvider.createDataEntryDefaultCocCache();
   }
 
   @Nonnull
@@ -336,6 +350,12 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
         (String) row0[1],
         (Boolean) row0[2],
         (Boolean) row0[3]);
+  }
+
+  @Nonnull
+  @Override
+  public UID getDefaultCategoryOptionCombo() {
+    return getDefaultCategoryOptionComboUid();
   }
 
   @Override
@@ -960,15 +980,43 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
     return getIdMap("categoryoptioncombo", ids);
   }
 
+  private DefaultCoc getDefaultCoc() {
+    return defaultCocCache.get("default", key -> resolveDefaultCoc());
+  }
+
+  private DefaultCoc resolveDefaultCoc() {
+    // among all rows named 'default' (there should only be one, but production databases have
+    // been observed to contain a duplicate) prefer the canonical UID if it is one of them
+    String sql =
+        """
+        SELECT coc.categoryoptioncomboid, coc.uid
+        FROM categoryoptioncombo coc
+        WHERE coc.name = 'default'
+        ORDER BY (coc.uid <> :canonicalUid)
+        LIMIT 1""";
+    List<Object[]> rows =
+        createNativeRawQuery(sql).setParameter("canonicalUid", DEFAULT_COC_CANONICAL_UID).list();
+    if (rows.isEmpty()) {
+      throw new IllegalStateException("No 'default' category option combo found in the database");
+    }
+    Object[] row = rows.get(0);
+    return new DefaultCoc(((Number) row[0]).longValue(), (String) row[1]);
+  }
+
   private long getDefaultCategoryOptionComboId() {
-    String sql = "select categoryoptioncomboid from categoryoptioncombo where name = 'default'";
-    return ((Number) getSession().createNativeQuery(sql).getSingleResult()).longValue();
+    return getDefaultCoc().id();
   }
 
   private UID getDefaultCategoryOptionComboUid() {
-    String sql = "select uid from categoryoptioncombo where name = 'default'";
-    return UID.of((String) getSession().createNativeQuery(sql).getSingleResult());
+    return UID.of(getDefaultCoc().uid());
   }
+
+  /** Called by {@code DataEntryCacheInvalidationListener} on any CategoryOptionCombo write. */
+  void invalidateDefaultCocCache() {
+    defaultCocCache.invalidateAll();
+  }
+
+  private record DefaultCoc(long id, String uid) {}
 
   private Map<String, Long> getOptionComboIdMap(List<DataEntryValue> values) {
     return getOptionComboIdMap(

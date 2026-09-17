@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,6 +150,16 @@ public interface DataEntryStore {
       @CheckForNull UID categoryOptionCombo,
       @CheckForNull UID attributeOptionCombo,
       @Nonnull Period period);
+
+  /**
+   * Resolves the UID of the "default" category option combo. Among all rows named {@code 'default'}
+   * the well-known canonical UID is preferred, which protects against a known production
+   * data-quality issue where a second, non-canonical row is also named {@code 'default'}.
+   *
+   * @return the UID of the default category option combo
+   */
+  @Nonnull
+  UID getDefaultCategoryOptionCombo();
 
   /**
    * Find the datasets a data element can be used with to allow grouping data values into groups of
