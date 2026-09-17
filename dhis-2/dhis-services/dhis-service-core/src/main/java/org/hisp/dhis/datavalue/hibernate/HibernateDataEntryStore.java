@@ -109,6 +109,8 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
 
   private final Cache<DefaultCoc> defaultCocCache;
 
+  private final Cache<Set<String>> cocsByCategoryComboCache;
+
   public HibernateDataEntryStore(
       EntityManager entityManager,
       PeriodStore periodStore,
@@ -118,6 +120,7 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
     super(entityManager, jdbcTemplate, publisher, DataValue.class, false);
     this.periodStore = periodStore;
     this.defaultCocCache = cacheProvider.createDataEntryDefaultCocCache();
+    this.cocsByCategoryComboCache = cacheProvider.createDataEntryCocsByCategoryComboCache();
   }
 
   @Nonnull
@@ -439,37 +442,67 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
 
   @Override
   public List<String> getCocNotInDataSet(UID dataSet, UID dataElement, Stream<UID> optionCombos) {
+    Long ccId = getEffectiveCategoryComboId(dataSet, dataElement);
+    Set<String> validCocs = ccId == null ? Set.of() : getCocsByCategoryCombo(ccId);
+    UID defaultCoc = getDefaultCategoryOptionComboUid();
+    return optionCombos
+        .map(id -> id == null ? defaultCoc : id)
+        .map(UID::getValue)
+        .distinct()
+        .filter(uid -> !validCocs.contains(uid))
+        .toList();
+  }
+
+  /**
+   * Resolves the effective category combo id for a (dataSet, dataElement) pair - {@code
+   * COALESCE(dse.categorycomboid, de.categorycomboid)}. This is a cheap, indexed lookup that
+   * changes whenever a {@code DataElement}'s category combo or a {@code DataSetElement} override
+   * changes, so it is intentionally left uncached; only the category-combo membership lookup below
+   * (which changes far less often) is cached.
+   *
+   * <p>Returns {@code null} when the data element is not actually linked to the data set via {@code
+   * datasetelement}, matching the original single-query CTE's behavior for that edge case (see
+   * {@link #getCocNotInDataSet}, which then treats every input COC as "not in data set"). This case
+   * is already guarded upstream by {@code DefaultDataEntryService .validateKeyConsistency}'s
+   * earlier {@link #getDataElementsNotInDataSet} check, so it should be unreachable in practice -
+   * this is defense in depth, not a behavior change.
+   */
+  @CheckForNull
+  private Long getEffectiveCategoryComboId(UID dataSet, UID dataElement) {
     String sql =
         """
-      WITH coc_list(uid) AS ( SELECT DISTINCT UNNEST(:coc) AS uid ),
-      dsde_coc AS (
-          SELECT coc_cc.categoryoptioncomboid
-          FROM categorycombos_optioncombos coc_cc
-          WHERE coc_cc.categorycomboid = (
-              SELECT COALESCE(dse.categorycomboid, de.categorycomboid)
-              FROM datasetelement dse
-              JOIN dataelement de ON de.dataelementid = dse.dataelementid
-              JOIN dataset ds ON ds.datasetid = dse.datasetid
-              WHERE ds.uid = :ds
-                AND de.uid = :de
-          )
-      )
-      SELECT coc_list.uid
-      FROM coc_list
-      LEFT JOIN categoryoptioncombo coc ON coc_list.uid = coc.uid
-      LEFT JOIN dsde_coc excluded ON coc.categoryoptioncomboid = excluded.categoryoptioncomboid
-      WHERE excluded.categoryoptioncomboid IS NULL""";
-    String ds = dataSet.getValue();
-    String de = dataElement.getValue();
-    UID defaultCoc = getDefaultCategoryOptionComboUid();
-    String[] coc =
-        optionCombos
-            .map(id -> id == null ? defaultCoc : id)
-            .map(UID::getValue)
-            .distinct()
-            .toArray(String[]::new);
-    return listAsStrings(
-        sql, q -> q.setParameter("coc", coc).setParameter("ds", ds).setParameter("de", de));
+        SELECT COALESCE(dse.categorycomboid, de.categorycomboid)
+        FROM datasetelement dse
+        JOIN dataelement de ON de.dataelementid = dse.dataelementid
+        JOIN dataset ds ON ds.datasetid = dse.datasetid
+        WHERE ds.uid = :ds
+          AND de.uid = :de""";
+    List<?> rows =
+        createNativeRawQuery(sql)
+            .setParameter("ds", dataSet.getValue())
+            .setParameter("de", dataElement.getValue())
+            .list();
+    return rows.isEmpty() ? null : ((Number) rows.get(0)).longValue();
+  }
+
+  private Set<String> getCocsByCategoryCombo(long categoryComboId) {
+    return cocsByCategoryComboCache.get(
+        String.valueOf(categoryComboId), key -> queryCocsByCategoryCombo(categoryComboId));
+  }
+
+  private Set<String> queryCocsByCategoryCombo(long categoryComboId) {
+    String sql =
+        """
+        SELECT coc.uid
+        FROM categorycombos_optioncombos coc_cc
+        JOIN categoryoptioncombo coc ON coc.categoryoptioncomboid = coc_cc.categoryoptioncomboid
+        WHERE coc_cc.categorycomboid = :cc""";
+    return Set.copyOf(listAsStrings(sql, q -> q.setParameter("cc", categoryComboId)));
+  }
+
+  /** Called by {@code DataEntryCacheInvalidationListener} on any CategoryOptionCombo write. */
+  void invalidateCocsByCategoryComboCache() {
+    cocsByCategoryComboCache.invalidateAll();
   }
 
   @Override
