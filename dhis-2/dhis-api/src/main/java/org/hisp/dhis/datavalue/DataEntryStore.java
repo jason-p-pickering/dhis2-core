@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -267,21 +267,34 @@ public interface DataEntryStore {
    *
    * @param dataSet DS to check (scope)
    * @param dataElement DE to check (scope)
-   * @param optionCombos COCs to check
+   * @param optionCombos COCs to check (a {@code null} entry stands for the default COC)
+   * @param defaultCategoryOptionCombo the UID a {@code null} entry in {@code optionCombos} is
+   *     substituted with, as resolved once by {@link #getDefaultCategoryOptionCombo()}
    * @return all COCs that are not connected to the CC for the given DS-DE combination and thus
    *     illegal to use. Meaning in a successful check the result is empty.
    */
-  List<String> getCocNotInDataSet(UID dataSet, UID dataElement, Stream<UID> optionCombos);
+  List<String> getCocNotInDataSet(
+      UID dataSet, UID dataElement, Stream<UID> optionCombos, UID defaultCategoryOptionCombo);
 
   /**
    * Checks that all given AOCs belong to the CC defined by the given DS.
    *
    * @param dataSet DS to check (scope)
-   * @param optionCombos AOCs to check
+   * @param optionCombos AOCs to check (a {@code null} entry stands for the default AOC)
+   * @param defaultCategoryOptionCombo the UID a {@code null} entry in {@code optionCombos} is
+   *     substituted with, as resolved once by {@link #getDefaultCategoryOptionCombo()}
    * @return all AOCs that are not connected to the given DS's CC and thus illegal to sue. Meaning
    *     in a successful check the result is empty.
    */
-  List<String> getAocNotInDataSet(UID dataSet, Stream<UID> optionCombos);
+  List<String> getAocNotInDataSet(
+      UID dataSet, Stream<UID> optionCombos, UID defaultCategoryOptionCombo);
+
+  /**
+   * @return the UID of the "default" category option combo (the single COC of the "default" CC).
+   *     This value is constant for the lifetime of the DB and safe to resolve once and reuse across
+   *     a whole validation pass instead of re-querying it per DE/AOC check.
+   */
+  UID getDefaultCategoryOptionCombo();
 
   /**
    * Finds AOCs in scope of the given AOCs that have explicit restrictions on the OUs that they can
