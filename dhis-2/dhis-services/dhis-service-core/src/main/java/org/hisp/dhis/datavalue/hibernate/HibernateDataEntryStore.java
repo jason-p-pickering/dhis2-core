@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -418,7 +418,8 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
   }
 
   @Override
-  public List<String> getCocNotInDataSet(UID dataSet, UID dataElement, Stream<UID> optionCombos) {
+  public List<String> getCocNotInDataSet(
+      UID dataSet, UID dataElement, Stream<UID> optionCombos, UID defaultCategoryOptionCombo) {
     String sql =
         """
       WITH coc_list(uid) AS ( SELECT DISTINCT UNNEST(:coc) AS uid ),
@@ -441,10 +442,9 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
       WHERE excluded.categoryoptioncomboid IS NULL""";
     String ds = dataSet.getValue();
     String de = dataElement.getValue();
-    UID defaultCoc = getDefaultCategoryOptionComboUid();
     String[] coc =
         optionCombos
-            .map(id -> id == null ? defaultCoc : id)
+            .map(id -> id == null ? defaultCategoryOptionCombo : id)
             .map(UID::getValue)
             .distinct()
             .toArray(String[]::new);
@@ -453,7 +453,13 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
   }
 
   @Override
-  public List<String> getAocNotInDataSet(UID dataSet, Stream<UID> optionCombos) {
+  public UID getDefaultCategoryOptionCombo() {
+    return getDefaultCategoryOptionComboUid();
+  }
+
+  @Override
+  public List<String> getAocNotInDataSet(
+      UID dataSet, Stream<UID> optionCombos, UID defaultCategoryOptionCombo) {
     String sql =
         """
         WITH aoc_list(uid) AS ( SELECT DISTINCT UNNEST(:aoc) AS uid ),
@@ -483,10 +489,9 @@ public class HibernateDataEntryStore extends HibernateGenericStore<DataValue>
             )
         )""";
     String ds = dataSet.getValue();
-    UID defaultAoc = getDefaultCategoryOptionComboUid();
     String[] aoc =
         optionCombos
-            .map(id -> id == null ? defaultAoc : id)
+            .map(id -> id == null ? defaultCategoryOptionCombo : id)
             .map(UID::getValue)
             .distinct()
             .toArray(String[]::new);

@@ -627,16 +627,21 @@ public class DefaultDataEntryService implements DataEntryService, DataDumpServic
     if (!isoNotUsableInDs.isEmpty())
       throw new ConflictException(ErrorCode.E8021, ds, isoNotUsableInDs);
 
+    // resolved once and reused below: it never varies within a validation pass
+    UID defaultCoc = store.getDefaultCategoryOptionCombo();
+
     // - require: AOC must link (belong) to the CC of the DS
-    List<String> aocNotInDs = store.getAocNotInDataSet(ds, source.attributeOptionCombos());
+    List<String> aocNotInDs =
+        store.getAocNotInDataSet(ds, source.attributeOptionCombos(), defaultCoc);
     if (!aocNotInDs.isEmpty()) throw new ConflictException(ErrorCode.E8023, ds, aocNotInDs);
 
     // - require: COC must link (belong) to the CC of the DE
-    Iterator<UID> deIter = source.dataElements().iterator();
+    Iterator<UID> deIter = source.dataElements().distinct().iterator();
     while (deIter.hasNext()) {
       UID de = deIter.next();
       List<String> cocNotInDs =
-          store.getCocNotInDataSet(ds, de, source.categoryOptionCombosForDataElement(de));
+          store.getCocNotInDataSet(
+              ds, de, source.categoryOptionCombosForDataElement(de), defaultCoc);
       if (!cocNotInDs.isEmpty()) throw new ConflictException(ErrorCode.E8024, ds, de, cocNotInDs);
     }
 
