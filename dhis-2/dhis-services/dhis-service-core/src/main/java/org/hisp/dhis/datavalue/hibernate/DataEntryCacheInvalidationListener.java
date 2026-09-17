@@ -54,6 +54,20 @@ import org.hisp.dhis.category.CategoryOptionCombo;
  * <p>Same-node only, a write committed on another node in a cluster is not seen by this listener,
  * so cross-node staleness still falls back to each cache's TTL.
  *
+ * <p><b>Design assumption, audited but not permanently guaranteed:</b> this listener only sees
+ * writes that go through Hibernate's per-entity save/update/delete lifecycle. A bulk native-SQL
+ * write to {@code categorycombos_optioncombos} or {@code categoryoptioncombo}, or a bulk HQL {@code
+ * UPDATE}, would bypass it entirely and silently stale both caches until their TTL expires. As of
+ * this class's introduction, no such path exists for this specific relationship — verified by
+ * auditing every category-combo/COC merge, metadata-import, and Liquibase code path in this
+ * codebase. However, the general pattern of bypassing Hibernate events via bulk native SQL with
+ * manual L2-cache sync does already exist elsewhere in this codebase for adjacent relationships
+ * (see {@code HibernateCategoryComboStore.updateCatComboCategoryRefs} and {@code
+ * HibernateCategoryStore.removeCatOptionCategoryRefs}, both used by Category-merge on different
+ * join tables). If a similar bulk-reassignment path is ever added for {@code
+ * CategoryOptionCombo.categoryCombo} specifically, this listener will not catch it and will need a
+ * matching invalidation call added at that new call site.
+ *
  * <p>Not a Spring-managed bean itself: {@link DataEntryCacheInvalidationListenerConfigurer}
  * constructs it directly, because the {@code hibernateDataEntryStore} bean is exposed to Spring
  * behind a JDK dynamic proxy (see {@link org.hisp.dhis.config.HibernateConfig}'s
