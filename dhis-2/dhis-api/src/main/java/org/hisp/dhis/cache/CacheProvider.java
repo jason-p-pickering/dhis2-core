@@ -119,4 +119,20 @@ public interface CacheProvider {
   <V> Cache<V> createSystemStatisticsDataCountsCache();
 
   <V> Cache<V> createDataSummarySessionGaugesCache();
+
+  /**
+   * Caches the resolved "default" category option combo (id + uid together, see {@link
+   * org.hisp.dhis.datavalue.hibernate.HibernateDataEntryStore}). This row only changes on a
+   * deliberate metadata operation touching the "default" CategoryOptionCombo, so a long TTL with
+   * invalidation on write is appropriate.
+   */
+  <V> Cache<V> createDataEntryDefaultCocCache();
+
+  /**
+   * Caches, per category combo id (as a string key), the set of category option combo UIDs that
+   * belong to it — used by {@link org.hisp.dhis.datavalue.hibernate.HibernateDataEntryStore} to
+   * check COC-in-CC validity during data value import without a DB round trip per distinct data
+   * element.
+   */
+  <V> Cache<V> createDataEntryCocsByCategoryComboCache();
 }
