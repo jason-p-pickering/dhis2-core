@@ -68,6 +68,9 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class HibernateDataExportStore implements DataExportStore {
 
+  /** Matches the fetch size already used by the plain {@code JdbcTemplate} stores. */
+  private static final int EXPORT_FETCH_SIZE = 1000;
+
   private final EntityManager entityManager;
 
   @Override
@@ -273,7 +276,11 @@ public class HibernateDataExportStore implements DataExportStore {
                 Map.entry(Order.PE, "pe.startdate, pe.enddate"),
                 Map.entry(Order.CREATED, "dv.created"),
                 Map.entry(Order.DE, "deid"),
-                Map.entry(Order.AOC, "aocid")));
+                Map.entry(Order.AOC, "aocid")))
+        // without this, Hibernate leaves the JDBC fetch size unset (0), which for the PostgreSQL
+        // driver means "fetch the whole result in one round trip" - i.e. no real streaming, no
+        // matter how large the export
+        .setFetchSize(EXPORT_FETCH_SIZE);
   }
 
   @CheckForNull

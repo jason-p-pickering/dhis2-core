@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -85,6 +85,17 @@ class JdbcTemplateQueryAPI {
     @Override
     public SQL.Query setOffset(int n) {
       params.put("_offset", new SqlParameterValue(Types.INTEGER, n));
+      return this;
+    }
+
+    /**
+     * No-op: the shared {@link NamedParameterJdbcTemplate}/{@code JdbcTemplate} bean this wraps
+     * already has its own fetch size configured once at construction (see {@code DataSourceConfig}
+     * / {@code AnalyticsDataSourceConfig}). Mutating it per-query would race with concurrent
+     * queries sharing the same singleton bean.
+     */
+    @Override
+    public SQL.Query setFetchSize(int n) {
       return this;
     }
 

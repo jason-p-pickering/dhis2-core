@@ -88,6 +88,15 @@ class DataExportQueryBuilderTest extends AbstractQueryBuilderTest {
   }
 
   @Test
+  void testFetchSize() {
+    // without an explicit JDBC fetch size, pgjdbc defaults to fetching the entire result in one
+    // round trip - defeating any attempt to stream a large export incrementally
+    DataExportParams params = DataExportParams.builder().includeDeleted(true).build();
+    createExportQuery(params, createSpyQuery(), new SystemUser()).stream();
+    assertEquals(1000, capturedFetchSize());
+  }
+
+  @Test
   void testFilter_AllNotDeleted() {
     DataExportParams params = DataExportParams.builder().build();
     assertSQL(
