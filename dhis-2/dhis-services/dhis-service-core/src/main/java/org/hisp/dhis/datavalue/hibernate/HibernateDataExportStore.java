@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@ package org.hisp.dhis.datavalue.hibernate;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.function.Function.identity;
-import static org.apache.commons.collections4.CollectionUtils.isEmpty;
 import static org.hisp.dhis.query.JpaQueryUtils.generateSQlQueryForSharingCheck;
 import static org.hisp.dhis.security.acl.AclService.LIKE_READ_DATA;
 import static org.hisp.dhis.user.CurrentUserUtil.getCurrentUserDetails;
@@ -229,8 +228,11 @@ public class HibernateDataExportStore implements DataExportStore {
       lastUpdated = new Date(currentTimeMillis() - params.getLastUpdatedDuration().toMillis());
 
     boolean descendants = params.isIncludeDescendants();
+    // no default ordering here: an ORDER BY is only useful (and cheap) when the caller actually
+    // needs it (e.g. ADX grouping, which sets its own explicit order) - for a plain export there
+    // is no consumer of row order, and pe.startdate/dv.created/deid have no supporting index, so
+    // an unrequested default forces Postgres into a blocking sort over the whole result set
     List<Order> orders = params.getOrders();
-    if (isEmpty(orders)) orders = List.of(Order.PE, Order.CREATED, Order.DE);
 
     List<UID> oug = params.getOrganisationUnitGroups();
     Set<String> ouCapture = currentUser.getUserOrgUnitIds();
