@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,15 +47,16 @@ public interface JsonSchema extends JsonObject {
   }
 
   default List<Class<?>> getReferences() {
-    return getArray("references")
-        .values(
+    return getArray("references").values().stream()
+        .<Class<?>>map(
             klass -> {
               try {
-                return Class.forName(klass);
+                return Class.forName(klass.string());
               } catch (ClassNotFoundException ex) {
                 throw new IllegalArgumentException(ex);
               }
-            });
+            })
+        .toList();
   }
 
   default String getRelativeApiEndpoint() {
