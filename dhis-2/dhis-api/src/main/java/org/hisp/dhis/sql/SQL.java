@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,7 @@ import java.util.Date;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -116,9 +117,24 @@ public final class SQL {
    */
   @Nonnull
   public static QueryAPI spy(Consumer<String> sqlSpy, BiConsumer<String, SQL.Param> paramsSpy) {
+    return spy(sqlSpy, paramsSpy, n -> {});
+  }
+
+  /**
+   * Same as {@link #spy(Consumer, BiConsumer)} but also allows to spy on a fetch size set via
+   * {@link Query#setFetchSize(int)}.
+   *
+   * @param sqlSpy the target to accept the SQL
+   * @param paramsSpy the target to accept parameters
+   * @param fetchSizeSpy the target to accept a fetch size, if one is set
+   * @return a spy {@link QueryAPI} implementation
+   */
+  @Nonnull
+  public static QueryAPI spy(
+      Consumer<String> sqlSpy, BiConsumer<String, SQL.Param> paramsSpy, IntConsumer fetchSizeSpy) {
     return sql -> {
       sqlSpy.accept(sql);
-      return new SpyQuery(paramsSpy);
+      return new SpyQuery(paramsSpy, fetchSizeSpy);
     };
   }
 
@@ -178,6 +194,17 @@ public final class SQL {
      * @return self for chaining
      */
     Query setOffset(int n);
+
+    /**
+     * Hint to the underlying driver on how many rows to fetch per round trip when streaming a large
+     * result set with {@link #stream(Class)}/{@link #stream(Function)}. Is only called when a fetch
+     * size is set. Implementations for which this does not apply (e.g. because a fetch size is
+     * already configured at a shared connection/template level) may treat this as a no-op.
+     *
+     * @param n number of rows to fetch per round trip
+     * @return self for chaining
+     */
+    Query setFetchSize(int n);
 
     /**
      * Execute the query and return results as a stream of objects of the given type. This assumes
@@ -326,7 +353,8 @@ public final class SQL {
   }
 
   /** A {@link Query} to simply record set params to verify them in tests. */
-  private record SpyQuery(BiConsumer<String, SQL.Param> paramsSpy) implements Query {
+  private record SpyQuery(BiConsumer<String, SQL.Param> paramsSpy, IntConsumer fetchSizeSpy)
+      implements Query {
 
     @Override
     public SQL.Query setParameter(@Nonnull Param param) {
@@ -343,6 +371,12 @@ public final class SQL {
     @Override
     public SQL.Query setOffset(int n) {
       // has no effect
+      return this;
+    }
+
+    @Override
+    public SQL.Query setFetchSize(int n) {
+      fetchSizeSpy.accept(n);
       return this;
     }
 

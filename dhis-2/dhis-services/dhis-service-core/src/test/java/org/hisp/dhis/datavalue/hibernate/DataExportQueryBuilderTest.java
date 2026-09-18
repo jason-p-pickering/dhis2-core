@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -86,6 +86,15 @@ class DataExportQueryBuilderTest extends AbstractQueryBuilderTest {
         ORDER BY pe.startdate, pe.enddate, dv.created, deid""",
         Set.of(),
         createExportQuery(params, createSpyQuery(), new SystemUser()));
+  }
+
+  @Test
+  void testFetchSize() {
+    // without an explicit JDBC fetch size, pgjdbc defaults to fetching the entire result in one
+    // round trip - defeating any attempt to stream a large export incrementally
+    DataExportParams params = DataExportParams.builder().includeDeleted(true).build();
+    createExportQuery(params, createSpyQuery(), new SystemUser()).stream();
+    assertEquals(1000, capturedFetchSize());
   }
 
   @Test
