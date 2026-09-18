@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,6 +80,12 @@ class HibernateNativeQueryAPI {
     @Override
     public SQL.Query setOffset(int n) {
       setters.add(q -> q.setFirstResult(n));
+      return this;
+    }
+
+    @Override
+    public SQL.Query setFetchSize(int n) {
+      setters.add(q -> q.setFetchSize(n));
       return this;
     }
 
