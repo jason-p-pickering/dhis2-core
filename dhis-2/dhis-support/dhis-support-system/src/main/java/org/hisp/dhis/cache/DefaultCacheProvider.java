@@ -496,4 +496,26 @@ public class DefaultCacheProvider implements CacheProvider {
             .forceInMemory()
             .withMaximumSize(orZeroInTestRun(1)));
   }
+
+  @Override
+  public <V> Cache<V> createDataEntryDefaultCocCache() {
+    return registerCache(
+        this.<V>newBuilder()
+            .forRegion(Region.dataEntryDefaultCoc.name())
+            .expireAfterWrite(12, TimeUnit.HOURS)
+            .withInitialCapacity((int) getActualSize(1))
+            .forceInMemory()
+            .withMaximumSize(orZeroInTestRun(getActualSize(SIZE_1))));
+  }
+
+  @Override
+  public <V> Cache<V> createDataEntryCocsByCategoryComboCache() {
+    return registerCache(
+        this.<V>newBuilder()
+            .forRegion(Region.dataEntryCocsByCategoryCombo.name())
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .withInitialCapacity((int) getActualSize(20))
+            .forceInMemory()
+            .withMaximumSize(orZeroInTestRun(getActualSize(SIZE_1K))));
+  }
 }
