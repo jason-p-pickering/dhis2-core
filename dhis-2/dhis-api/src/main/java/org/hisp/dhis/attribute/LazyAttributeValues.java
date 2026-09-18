@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2024, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -148,7 +148,7 @@ final class LazyAttributeValues implements AttributeValues {
 
   @Nonnull
   private static TreeMap<String, String> parseObjectJson(JsonObject map) {
-    return map.entries()
+    return map.entries().stream()
         .collect(
             Collectors.toMap(
                 e -> e.getKey().toString(),

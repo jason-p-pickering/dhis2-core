@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -290,7 +290,8 @@ public final class DataEntryInput {
     // to make the processing memory footprint smaller
     JsonArray dataValues = dvs.get("dataValues");
     if (dataValues.exists())
-      dataValues.stream(JsonNode.Index.SKIP)
+      dataValues
+          .values(JsonNode.Index.SKIP)
           .forEach(
               dv -> {
                 JsonString coc = dv.getString("categoryOptionCombo");

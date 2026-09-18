@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -266,7 +266,7 @@ class OpenApiControllerTest extends H2ControllerIntegrationTestBase {
 
     assertEquals(
         Set.of("pager", "organisationUnits"),
-        properties.keys().map(Text::toString).collect(toSet()),
+        Set.copyOf(properties.keys().map(Text::toString).toList()),
         "there should only be a pager and an entity list property");
 
     SchemaObject listSchema = properties.get("organisationUnits");
