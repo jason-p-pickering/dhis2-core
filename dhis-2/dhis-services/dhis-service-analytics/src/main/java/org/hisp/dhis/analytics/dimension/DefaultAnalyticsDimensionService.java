@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 package org.hisp.dhis.analytics.dimension;
+
+import static org.hisp.dhis.common.DimensionConstants.DATA_X_DIM_ID;
+import static org.hisp.dhis.common.DimensionalObjectUtils.getDimensionFromParam;
 
 import java.util.HashSet;
 import java.util.List;
@@ -62,7 +65,19 @@ public class DefaultAnalyticsDimensionService implements AnalyticsDimensionServi
 
   @Override
   public List<DimensionalObject> getRecommendedDimensions(DataQueryRequest request) {
-    DataQueryParams params = dataQueryService.getFromRequest(request);
+    // Recommendations are derived solely from the data (dx) dimension. Strip all other
+    // dimensions (notably ou:LEVEL-*) before resolving, so getFromRequest does not eagerly
+    // hydrate and sort potentially huge organisation unit collections that are never read.
+    Set<String> dataDimensionsOnly =
+        request.getDimension() == null
+            ? null
+            : request.getDimension().stream()
+                .filter(param -> DATA_X_DIM_ID.equals(getDimensionFromParam(param)))
+                .collect(Collectors.toSet());
+
+    DataQueryParams params =
+        dataQueryService.getFromRequest(
+            DataQueryRequest.newBuilder().dimension(dataDimensionsOnly).build());
     return getRecommendedDimensions(params);
   }
 
