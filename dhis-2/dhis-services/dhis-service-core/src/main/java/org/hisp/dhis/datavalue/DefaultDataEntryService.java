@@ -875,7 +875,8 @@ public class DefaultDataEntryService implements DataEntryService, DataDumpServic
     // - require: DS not already approved (data approval)
     Set<String> aocInApproval = Set.copyOf(store.getDataSetAocInApproval(ds));
     if (!aocInApproval.isEmpty()) {
-      Iterator<UID> iterAoc = source.attributeOptionCombos().filter(Objects::nonNull).iterator();
+      Iterator<UID> iterAoc =
+          source.attributeOptionCombos().filter(Objects::nonNull).distinct().iterator();
       while (iterAoc.hasNext()) {
         UID aoc = iterAoc.next();
         if (!aocInApproval.contains(aoc.getValue())) continue;
