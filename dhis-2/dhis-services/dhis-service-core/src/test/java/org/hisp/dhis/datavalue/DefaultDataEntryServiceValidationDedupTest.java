@@ -29,6 +29,7 @@
  */
 package org.hisp.dhis.datavalue;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -38,7 +39,9 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.stream.Stream;
 import org.hisp.dhis.common.UID;
 import org.hisp.dhis.common.ValueType;
 import org.hisp.dhis.feedback.ConflictException;
@@ -50,16 +53,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 /**
- * Confirms {@link DefaultDataEntryService#upsertGroup} de-duplicates data elements (and, in the
- * AOC/org-unit-hierarchy check, attribute option combos) before issuing per-item validation
- * queries, so a bulk import with many rows sharing the same data element issues one validation
- * query per distinct data element, not one per row.
+ * Confirms {@link DefaultDataEntryService#upsertGroup} de-duplicates data elements before the
+ * COC-in-data-set validation, so a bulk import with many rows sharing the same data element issues
+ * a single batched query keyed by distinct data element, not one entry per row.
  */
 @MockitoSettings(strictness = Strictness.LENIENT)
 @ExtendWith(MockitoExtension.class)
@@ -115,9 +118,11 @@ class DefaultDataEntryServiceValidationDedupTest {
 
     service.upsertGroup(new DataEntryGroup.Options(false, false, true), group, progress);
 
-    // Without de-duplication this would be called twice for DE_A (once per row).
-    verify(store, times(1)).getCocNotInDataSet(eq(DATA_SET), eq(DE_A), any());
-    verify(store, times(1)).getCocNotInDataSet(eq(DATA_SET), eq(DE_B), any());
+    // One batched query, keyed by distinct data element (DE_A appears once despite two rows).
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<UID, Stream<UID>>> cocsByDe = ArgumentCaptor.forClass(Map.class);
+    verify(store, times(1)).getCocNotInDataSet(eq(DATA_SET), cocsByDe.capture());
+    assertEquals(Set.of(DE_A, DE_B), cocsByDe.getValue().keySet());
   }
 
   private static DataEntryValue row(UID dataElement, UID coc) {
