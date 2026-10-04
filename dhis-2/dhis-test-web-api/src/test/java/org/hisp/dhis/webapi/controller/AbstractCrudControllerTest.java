@@ -935,6 +935,59 @@ class AbstractCrudControllerTest extends H2ControllerIntegrationTestBase {
     assertCollectionIds("/dataSets/" + dsId, "organisationUnits", ouB);
   }
 
+  @Test
+  void testReplaceCollectionItemsJson_NonOwned_NoWriteAccessToItem() {
+    String ouId =
+        assertStatus(
+            HttpStatus.CREATED,
+            POST(
+                "/organisationUnits/",
+                "{'name':'OU A', 'shortName':'OUA', 'openingDate':'2020-01-01'}"));
+    String dsA = postReadOnlyDataSet("Apple Data", "AD");
+    String dsB = postReadOnlyDataSet("Banana Data", "BD");
+    String path = "/organisationUnits/" + ouId + "/dataSets";
+    assertReplaceStats(path, 1, 0, dsA);
+
+    // can edit the org unit, but cannot write the data sets that own the link
+    switchToNewUser("ouManager", "F_ORGANISATIONUNIT_ADD");
+
+    // unchanged list: nothing to update, so allowed
+    assertReplaceStats(path, 0, 0, dsA);
+
+    // removing or adding a data set is refused with a clear 403 and changes nothing
+    manager.flush();
+    manager.clear();
+    JsonWebMessage removal =
+        PUT(path, "{'identifiableObjects':[]}")
+            .content(HttpStatus.FORBIDDEN)
+            .as(JsonWebMessage.class);
+    assertTrue(removal.getMessage().contains(dsA), removal.getMessage());
+
+    manager.flush();
+    manager.clear();
+    JsonWebMessage addition =
+        PUT(path, "{'identifiableObjects':[{'id':'" + dsA + "'},{'id':'" + dsB + "'}]}")
+            .content(HttpStatus.FORBIDDEN)
+            .as(JsonWebMessage.class);
+    assertTrue(addition.getMessage().contains(dsB), addition.getMessage());
+    assertFalse(addition.getMessage().contains(dsA), addition.getMessage());
+
+    switchToAdminUser();
+    assertCollectionIds("/organisationUnits/" + ouId, "dataSets", dsA);
+  }
+
+  private String postReadOnlyDataSet(String name, String shortName) {
+    return assertStatus(
+        HttpStatus.CREATED,
+        POST(
+            "/dataSets/",
+            "{'name':'"
+                + name
+                + "', 'shortName':'"
+                + shortName
+                + "', 'periodType':'Monthly', 'sharing':{'public':'r-------','external':false}}"));
+  }
+
   private String postMonthlyDataSet(String name, String shortName) {
     return assertStatus(
         HttpStatus.CREATED,
