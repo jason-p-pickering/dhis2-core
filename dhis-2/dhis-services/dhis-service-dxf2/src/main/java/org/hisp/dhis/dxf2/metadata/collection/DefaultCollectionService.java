@@ -56,6 +56,7 @@ import org.hisp.dhis.schema.SchemaService;
 import org.hisp.dhis.schema.validation.SchemaValidator;
 import org.hisp.dhis.security.acl.AclService;
 import org.hisp.dhis.user.CurrentUserUtil;
+import org.hisp.dhis.user.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -91,6 +92,8 @@ public class DefaultCollectionService implements CollectionService {
     if (itemCodes.isEmpty()) {
       return TypeReport.empty(property.getItemKlass());
     }
+
+    checkCanUpdateOwningItems(property, itemCodes);
 
     TypeReport report = new TypeReport(property.getItemKlass());
 
@@ -168,6 +171,8 @@ public class DefaultCollectionService implements CollectionService {
     if (itemCodes.isEmpty()) {
       return TypeReport.empty(property.getItemKlass());
     }
+
+    checkCanUpdateOwningItems(property, itemCodes);
 
     TypeReport report = new TypeReport(property.getItemKlass());
 
@@ -264,6 +269,10 @@ public class DefaultCollectionService implements CollectionService {
             .map(IdentifiableObject.class::cast)
             .toList();
 
+    // check all of it up front: a denial in the add pass would otherwise commit the removals
+    checkCanUpdateOwningItems(property, getItemCodes(removed));
+    checkCanUpdateOwningItems(property, getItemCodes(added));
+
     TypeReport deletions = delCollectionItems(object, propertyName, removed);
     TypeReport additions = addCollectionItems(object, propertyName, added);
     return deletions.mergeAllowEmpty(additions);
@@ -274,6 +283,11 @@ public class DefaultCollectionService implements CollectionService {
   public TypeReport mergeCollectionItems(
       IdentifiableObject object, String propertyName, IdentifiableObjects items)
       throws ForbiddenException, ConflictException, NotFoundException, BadRequestException {
+    Property property =
+        validateUpdate(object, propertyName, "Only identifiable object collections can be merged.");
+    checkCanUpdateOwningItems(property, getItemCodes(items.getDeletions()));
+    checkCanUpdateOwningItems(property, getItemCodes(items.getAdditions()));
+
     TypeReport delReport = delCollectionItems(object, propertyName, items.getDeletions());
     TypeReport addReport = addCollectionItems(object, propertyName, items.getAdditions());
     return delReport.mergeAllowEmpty(addReport);
@@ -298,6 +312,31 @@ public class DefaultCollectionService implements CollectionService {
       throw new ConflictException(message);
     }
     return property;
+  }
+
+  /**
+   * When the collection is not owned by the object (for example {@code OrganisationUnit.dataSets},
+   * owned by {@code DataSet.sources}), adding or removing an item updates the item, so the user
+   * needs write access to it. Check this before anything is changed: a denial from the store's
+   * update would only mark the transaction rollback-only and be reported as an unexplained 500.
+   */
+  private void checkCanUpdateOwningItems(Property property, Collection<String> itemCodes)
+      throws ForbiddenException {
+    if (property.isOwner() || itemCodes.isEmpty()) {
+      return;
+    }
+    UserDetails currentUser = CurrentUserUtil.getCurrentUserDetails();
+    List<String> denied =
+        getItems(property, itemCodes).stream()
+            .filter(item -> aclService.isClassShareable(HibernateProxyUtils.getRealClass(item)))
+            .filter(item -> !aclService.canUpdate(currentUser, item))
+            .map(item -> "%s (%s)".formatted(item.getName(), item.getUid()))
+            .toList();
+    if (!denied.isEmpty()) {
+      throw new ForbiddenException(
+          "You don't have write access to these %s, so they can't be added or removed: %s"
+              .formatted(property.getCollectionName(), String.join(", ", denied)));
+    }
   }
 
   private Collection<String> getItemCodes(Collection<? extends IdentifiableObject> objects) {
