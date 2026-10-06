@@ -28,7 +28,9 @@
     <property name="translations" type="jblTranslations"/>
 
     <set name="members" table="orgunitgroupmembers">
-      <cache usage="nonstrict-read-write" />
+      <!-- No L2 cache: the set holds up to hundreds of thousands of org units and is rarely
+           read through L2 (seen on a large production system: about 300 gets a day, under 50%
+           hits), while every load or eviction moves the whole set. -->
       <key column="orgunitgroupid" foreign-key="fk_orgunitgroupmembers_orgunitgroupid" />
       <many-to-many class="org.hisp.dhis.organisationunit.OrganisationUnit" column="organisationunitid"
         foreign-key="fk_orgunitgroup_organisationunitid" />

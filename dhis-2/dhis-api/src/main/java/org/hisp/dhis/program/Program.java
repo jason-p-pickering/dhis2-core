@@ -217,7 +217,7 @@ public class Program extends BaseMetadataObject
       name = "program_organisationunits",
       joinColumns = @JoinColumn(name = "programid"),
       inverseJoinColumns = @JoinColumn(name = "organisationunitid"))
-  @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+  // No L2 cache: see DataSet.sources. Up to hundreds of thousands of org units, rarely read via L2.
   private Set<OrganisationUnit> organisationUnits = new HashSet<>();
 
   @OneToMany

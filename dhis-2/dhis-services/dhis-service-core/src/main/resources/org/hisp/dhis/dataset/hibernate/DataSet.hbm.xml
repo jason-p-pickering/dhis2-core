@@ -57,7 +57,9 @@
     </set>
 
     <set name="sources" table="datasetsource">
-      <cache usage="read-write" />
+      <!-- No L2 cache: the set holds up to hundreds of thousands of org units and is rarely
+           read through L2 (seen on a large production system: about 300 gets a day, under 50%
+           hits), while every load or eviction moves the whole set. -->
       <key column="datasetid" foreign-key="fk_datasetsource_datasetid" />
       <many-to-many column="sourceid" class="org.hisp.dhis.organisationunit.OrganisationUnit"
         foreign-key="fk_dataset_organisationunit" />
