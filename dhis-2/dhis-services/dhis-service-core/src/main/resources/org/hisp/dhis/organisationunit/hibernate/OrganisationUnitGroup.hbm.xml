@@ -28,7 +28,9 @@
     <property name="translations" type="jblTranslations"/>
 
     <set name="members" table="orgunitgroupmembers">
-      <cache usage="nonstrict-read-write" />
+      <!-- No L2 cache: a group can hold hundreds of thousands of org units, the set is rarely read
+           through L2, and every load or eviction moves the whole set. Without a cached copy, single
+           member changes can be written to the join table directly (see LinkTableWriter). -->
       <key column="orgunitgroupid" foreign-key="fk_orgunitgroupmembers_orgunitgroupid" />
       <many-to-many class="org.hisp.dhis.organisationunit.OrganisationUnit" column="organisationunitid"
         foreign-key="fk_orgunitgroup_organisationunitid" />
