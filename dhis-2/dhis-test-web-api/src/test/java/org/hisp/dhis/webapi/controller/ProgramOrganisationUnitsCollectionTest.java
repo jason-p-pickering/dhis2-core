@@ -32,69 +32,68 @@ package org.hisp.dhis.webapi.controller;
 import java.util.Set;
 import org.hisp.dhis.common.IdentifiableObject;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
-import org.hisp.dhis.organisationunit.OrganisationUnitGroup;
+import org.hisp.dhis.program.Program;
 
 /**
- * Org unit group members, changed from the group side ({@code /organisationUnitGroups/{uid}/
- * organisationUnits}) or the org unit side ({@code
- * /organisationUnits/{uid}/organisationUnitGroups}).
+ * Program org units, changed from the program side ({@code /programs/{uid}/organisationUnits}) or
+ * the org unit side ({@code /organisationUnits/{uid}/programs}).
  *
  * @author Jason P. Pickering <jason@dhis2.org>
  */
-class OrganisationUnitGroupMembersCollectionTest extends AbstractOrgUnitLinkCollectionTest {
+class ProgramOrganisationUnitsCollectionTest extends AbstractOrgUnitLinkCollectionTest {
 
   @Override
   protected Class<? extends IdentifiableObject> ownerClass() {
-    return OrganisationUnitGroup.class;
+    return Program.class;
   }
 
   @Override
   protected IdentifiableObject newOwner() {
-    return createOrganisationUnitGroup('A');
+    return createProgram('A');
   }
 
   @Override
   protected void addOrgUnit(IdentifiableObject owner, OrganisationUnit unit) {
-    ((OrganisationUnitGroup) owner).addOrganisationUnit(unit);
+    ((Program) owner).addOrganisationUnit(unit);
   }
 
   @Override
   protected Set<OrganisationUnit> orgUnits(IdentifiableObject owner) {
-    return ((OrganisationUnitGroup) owner).getMembers();
+    return ((Program) owner).getOrganisationUnits();
   }
 
   @Override
   protected String ownerEndpoint() {
-    return "organisationUnitGroups";
+    return "programs";
   }
 
   @Override
   protected String orgUnitProperty() {
-    return "organisationUnitGroups";
+    return "programs";
   }
 
   @Override
   protected String ownerField() {
-    return "members";
+    return "organisationUnits";
   }
 
   @Override
   protected String inverseField() {
-    return "groups";
+    return "programs";
   }
 
   @Override
   protected String ownerTable() {
-    return "orgunitgroup";
+    return "program";
   }
 
   @Override
   protected String ownerIdColumn() {
-    return "orgunitgroupid";
+    return "programid";
   }
 
   @Override
   protected String joinTable() {
-    return "orgunitgroupmembers";
+    return "program_organisationunits";
   }
 }
