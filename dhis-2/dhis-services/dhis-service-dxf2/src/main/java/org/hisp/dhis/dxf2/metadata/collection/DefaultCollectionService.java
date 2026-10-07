@@ -38,6 +38,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.Hibernate;
 import org.hisp.dhis.common.IdentifiableObject;
 import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.common.IdentifiableObjects;
@@ -50,6 +51,7 @@ import org.hisp.dhis.feedback.NotFoundException;
 import org.hisp.dhis.feedback.ObjectReport;
 import org.hisp.dhis.feedback.TypeReport;
 import org.hisp.dhis.hibernate.HibernateProxyUtils;
+import org.hisp.dhis.hibernate.LinkTableWriter;
 import org.hisp.dhis.schema.Property;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
@@ -74,6 +76,8 @@ public class DefaultCollectionService implements CollectionService {
   private final SchemaValidator schemaValidator;
 
   private final EntityManager entityManager;
+
+  private final LinkTableWriter linkTableWriter;
 
   @Override
   @Transactional
@@ -107,6 +111,7 @@ public class DefaultCollectionService implements CollectionService {
       IdentifiableObject object, Property property, Collection<String> itemCodes, TypeReport report)
       throws BadRequestException {
     Collection<IdentifiableObject> collection = getCollection(object, property);
+    boolean direct = canWriteDirectly(object, property);
 
     updateCollectionItems(
         property,
@@ -114,14 +119,16 @@ public class DefaultCollectionService implements CollectionService {
         report,
         ErrorCode.E1108,
         item -> {
-          if (!collection.contains(item)) {
+          if (direct) {
+            countUpdate(report, linkTableWriter.add(role(object, property), id(object), id(item)));
+          } else if (!collection.contains(item)) {
             collection.add(item);
             report.updatedInc(1);
           } else {
             report.ignoredInc(1);
           }
         });
-    validateAndThrowErrors(() -> schemaValidator.validateProperty(property, object));
+    validateCollectionProperty(property, object);
   }
 
   private void addNonOwnedCollectionItems(
@@ -138,6 +145,16 @@ public class DefaultCollectionService implements CollectionService {
         report,
         ErrorCode.E1108,
         item -> {
+          if (canWriteDirectly(item, owningProperty)) {
+            validateAndThrowErrors(() -> schemaValidator.validateProperty(property, object));
+            if (linkTableWriter.add(role(item, owningProperty), id(item), id(object))) {
+              manager.update(item);
+              report.updatedInc(1);
+            } else {
+              report.ignoredInc(1);
+            }
+            return;
+          }
           Collection<IdentifiableObject> collection = getCollection(item, owningProperty);
 
           if (!collection.contains(object)) {
@@ -177,7 +194,7 @@ public class DefaultCollectionService implements CollectionService {
       delNonOwnedCollectionItems(object, property, itemCodes, report);
     }
 
-    validateAndThrowErrors(() -> schemaValidator.validateProperty(property, object));
+    validateCollectionProperty(property, object);
     return report;
   }
 
@@ -187,6 +204,7 @@ public class DefaultCollectionService implements CollectionService {
       Collection<String> itemCodes,
       TypeReport report) {
     Collection<IdentifiableObject> collection = getCollection(object, property);
+    boolean direct = canWriteDirectly(object, property);
 
     updateCollectionItems(
         property,
@@ -194,7 +212,10 @@ public class DefaultCollectionService implements CollectionService {
         report,
         ErrorCode.E1109,
         item -> {
-          if (collection.contains(item)) {
+          if (direct) {
+            countDelete(
+                report, linkTableWriter.remove(role(object, property), id(object), id(item)));
+          } else if (collection.contains(item)) {
             collection.remove(item);
             report.deletedInc(1);
           } else {
@@ -217,6 +238,15 @@ public class DefaultCollectionService implements CollectionService {
         report,
         ErrorCode.E1109,
         item -> {
+          if (canWriteDirectly(item, owningProperty)) {
+            if (linkTableWriter.remove(role(item, owningProperty), id(item), id(object))) {
+              manager.update(item);
+              report.deletedInc(1);
+            } else {
+              report.ignoredInc(1);
+            }
+            return;
+          }
           Collection<IdentifiableObject> collection = getCollection(item, owningProperty);
 
           if (collection.contains(object)) {
@@ -290,6 +320,62 @@ public class DefaultCollectionService implements CollectionService {
       throw new ConflictException(message);
     }
     return property;
+  }
+
+  /**
+   * Single links of an owning collection can be written to its join table directly when the {@link
+   * LinkTableWriter} supports the role and the collection is not loaded yet. Changing it through
+   * Hibernate would load the whole collection first, which for large org unit sets means hydrating
+   * hundreds of thousands of entities. A collection that is already loaded is changed in memory as
+   * before, so the session stays consistent with the database.
+   */
+  private boolean canWriteDirectly(IdentifiableObject owner, Property owningProperty) {
+    return owningProperty.isOwner()
+        && isSizeUnconstrained(owningProperty)
+        && linkTableWriter.supports(role(owner, owningProperty))
+        && !Hibernate.isInitialized(getCollection(owner, owningProperty));
+  }
+
+  /**
+   * Validates a collection property, unless the collection is not loaded and has no size limits:
+   * the only validation that applies to a collection is its size, and checking it would load it.
+   */
+  private void validateCollectionProperty(Property property, IdentifiableObject object)
+      throws BadRequestException {
+    if (isSizeUnconstrained(property)
+        && !Hibernate.isInitialized(getCollection(object, property))) {
+      return;
+    }
+    validateAndThrowErrors(() -> schemaValidator.validateProperty(property, object));
+  }
+
+  private static boolean isSizeUnconstrained(Property property) {
+    return (property.getMin() == null || property.getMin() <= 0)
+        && (property.getMax() == null || property.getMax() >= Integer.MAX_VALUE);
+  }
+
+  private static String role(IdentifiableObject owner, Property owningProperty) {
+    return HibernateProxyUtils.getRealClass(owner).getName() + "." + owningProperty.getFieldName();
+  }
+
+  private static long id(IdentifiableObject object) {
+    return object.getId();
+  }
+
+  private static void countUpdate(TypeReport report, boolean changed) {
+    if (changed) {
+      report.updatedInc(1);
+    } else {
+      report.ignoredInc(1);
+    }
+  }
+
+  private static void countDelete(TypeReport report, boolean changed) {
+    if (changed) {
+      report.deletedInc(1);
+    } else {
+      report.ignoredInc(1);
+    }
   }
 
   private Collection<String> getItemCodes(Collection<? extends IdentifiableObject> objects) {
