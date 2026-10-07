@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -217,7 +217,9 @@ public class Program extends BaseMetadataObject
       name = "program_organisationunits",
       joinColumns = @JoinColumn(name = "programid"),
       inverseJoinColumns = @JoinColumn(name = "organisationunitid"))
-  // No L2 cache: see DataSet.sources. Up to hundreds of thousands of org units, rarely read via L2.
+  // No L2 cache: a program can be assigned to hundreds of thousands of org units, the set is rarely
+  // read through L2, and every load or eviction moves the whole set. Without a cached copy, single
+  // assignments can be written to the join table directly (see LinkTableWriter).
   private Set<OrganisationUnit> organisationUnits = new HashSet<>();
 
   @OneToMany
