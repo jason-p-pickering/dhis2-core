@@ -181,6 +181,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-core-jakarta</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.springframework</groupId>
       <artifactId>spring-webmvc</artifactId>
       <scope>test</scope>
@@ -486,7 +491,6 @@
             <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-service-validation</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-support-artemis</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-support-db-migration</ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-support-hibernate</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-support-jdbc</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-service-setting</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.openjdk.jmh:jmh-generator-annprocess</ignoredUnusedDeclaredDependency>
@@ -509,6 +513,7 @@
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-service-analytics</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-support-system</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-tracker</ignoredNonTestScopedDependency>
+            <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-support-hibernate</ignoredNonTestScopedDependency>
           </ignoredNonTestScopedDependencies>
         </configuration>
       </plugin>
