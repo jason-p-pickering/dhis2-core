@@ -62,7 +62,9 @@ public class LinkTableWriter {
 
   /** Owning collection roles that may be written directly. */
   private static final Set<String> ROLES =
-      Set.of("org.hisp.dhis.organisationunit.OrganisationUnitGroup.members");
+      Set.of(
+          "org.hisp.dhis.organisationunit.OrganisationUnitGroup.members",
+          "org.hisp.dhis.program.Program.organisationUnits");
 
   private final EntityManager entityManager;
 
