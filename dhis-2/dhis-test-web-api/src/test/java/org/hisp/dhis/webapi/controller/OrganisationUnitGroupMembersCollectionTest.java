@@ -48,6 +48,7 @@ import org.hibernate.stat.Statistics;
 import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.dxf2.metadata.collection.CollectionService;
 import org.hisp.dhis.hibernate.LinkTableWriter;
+import org.hisp.dhis.http.HttpClientAdapter.HttpResponse;
 import org.hisp.dhis.http.HttpStatus;
 import org.hisp.dhis.jsontree.JsonArray;
 import org.hisp.dhis.jsontree.JsonObject;
@@ -313,6 +314,40 @@ class OrganisationUnitGroupMembersCollectionTest extends PostgresControllerInteg
       executor.shutdownNow();
     }
     assertMembers(memberId, otherId);
+  }
+
+  /**
+   * A user who can edit the org unit but not the group must not change the group's members. From
+   * the group side the request is refused up front (403). From the org unit side the row is written
+   * before the group's update is refused, and the refused update rolls the whole transaction back,
+   * which also undoes the row; the response is currently a 500 (a separate, pre-existing issue).
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"group", "orgUnit"})
+  void testUserWithoutEditAccessToGroup(String side) {
+    doInTransaction(
+        () -> {
+          OrganisationUnitGroup group = manager.get(OrganisationUnitGroup.class, groupId);
+          group.getSharing().setPublicAccess("r-------");
+          group.getSharing().setOwner((String) null);
+          manager.update(group);
+        });
+    entityManager.clear();
+    switchToNewUser("noGroupEdit", "F_ORGANISATIONUNIT_ADD");
+    boolean groupSide = "group".equals(side);
+
+    HttpResponse add = POST(groupSide ? groupPath(otherId) : orgUnitPath(otherId));
+    HttpResponse remove = DELETE(groupSide ? groupPath(memberId) : orgUnitPath(memberId));
+
+    if (groupSide) {
+      assertEquals(HttpStatus.FORBIDDEN, add.status(), "add");
+      assertEquals(HttpStatus.FORBIDDEN, remove.status(), "remove");
+    } else {
+      assertFalse(add.success(), "add");
+      assertFalse(remove.success(), "remove");
+    }
+    switchToAdminUser();
+    assertMembers(memberId);
   }
 
   @Test
