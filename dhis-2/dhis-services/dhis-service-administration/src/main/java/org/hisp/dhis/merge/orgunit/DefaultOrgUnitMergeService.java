@@ -30,6 +30,8 @@
 package org.hisp.dhis.merge.orgunit;
 
 import com.google.common.collect.ImmutableList;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.FlushModeType;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -63,12 +65,15 @@ public class DefaultOrgUnitMergeService implements OrgUnitMergeService {
 
   private final MergeLock mergeLock;
 
+  private final EntityManager entityManager;
+
   private final ImmutableList<OrgUnitMergeHandler> handlers;
 
   public DefaultOrgUnitMergeService(
       OrgUnitMergeValidator validator,
       IdentifiableObjectManager idObjectManager,
       MergeLock mergeLock,
+      EntityManager entityManager,
       MetadataOrgUnitMergeHandler metadataHandler,
       AnalyticalObjectOrgUnitMergeHandler analyticalObjectHandler,
       DataOrgUnitMergeHandler dataHandler,
@@ -76,6 +81,7 @@ public class DefaultOrgUnitMergeService implements OrgUnitMergeService {
     this.validator = validator;
     this.idObjectManager = idObjectManager;
     this.mergeLock = mergeLock;
+    this.entityManager = entityManager;
     this.handlers =
         getMergeHandlers(metadataHandler, analyticalObjectHandler, dataHandler, trackerHandler);
   }
@@ -128,13 +134,26 @@ public class DefaultOrgUnitMergeService implements OrgUnitMergeService {
 
     validator.validate(request);
 
-    handlers.forEach(handler -> handler.merge(request));
+    // Moving the sources out of data sets, programs and groups loads their whole org unit sets
+    // into the session. With the default flush mode every later query in the handlers then
+    // dirty-checks all of those entities first. None of the handlers' queries read the changes
+    // made in memory, so flush them once, before the sources are deleted, instead.
+    FlushModeType flushMode = entityManager.getFlushMode();
+    entityManager.setFlushMode(FlushModeType.COMMIT);
 
-    // Persistence framework will inspect and update associated objects
+    try {
+      handlers.forEach(handler -> handler.merge(request));
 
-    idObjectManager.update(request.getTarget());
+      // Persistence framework will inspect and update associated objects
 
-    handleDeleteSources(request);
+      idObjectManager.update(request.getTarget());
+
+      entityManager.flush();
+
+      handleDeleteSources(request);
+    } finally {
+      entityManager.setFlushMode(flushMode);
+    }
 
     log.info("Org unit merge operation done: {}", request);
   }
