@@ -49,7 +49,6 @@ import org.hisp.dhis.attribute.AttributeService;
 import org.hisp.dhis.category.CategoryCombo;
 import org.hisp.dhis.category.CategoryOptionCombo;
 import org.hisp.dhis.category.CategoryService;
-import org.hisp.dhis.common.DataDimensionType;
 import org.hisp.dhis.common.IdProperty;
 import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.common.IdentifiableProperty;
@@ -175,9 +174,6 @@ class DataExportServiceExportTest extends PostgresIntegrationTestBase {
     dataElementService.addDataElement(deC);
     dataElementService.addDataElement(deD);
     ccA = createCategoryCombo('A');
-    // only ATTRIBUTE-type category combos are valid as a data set's category combo; see the
-    // aoc_access CTE in HibernateDataExportStore, which only checks sharing for that type
-    ccA.setDataDimensionType(DataDimensionType.ATTRIBUTE);
     categoryService.addCategoryCombo(ccA);
     cocA = createCategoryOptionCombo('A');
     cocB = createCategoryOptionCombo('B');
