@@ -75,7 +75,7 @@ public final class SQL {
       LONG(Long.class),
       STRING(String.class),
       DATE(Date.class),
-      LONG_ARRAY(Long[].class),
+      LONG_ARRAY(long[].class),
       STRING_ARRAY(String[].class);
 
       /**
