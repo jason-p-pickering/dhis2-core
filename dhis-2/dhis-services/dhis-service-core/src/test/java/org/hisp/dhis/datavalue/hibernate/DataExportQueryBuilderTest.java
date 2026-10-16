@@ -503,7 +503,8 @@ class DataExportQueryBuilderTest extends AbstractQueryBuilderTest {
         JOIN organisationunit ou ON dv.sourceid = ou.organisationunitid
         JOIN categoryoptioncombo coc ON dv.categoryoptioncomboid = coc.categoryoptioncomboid
         JOIN categoryoptioncombo aoc ON dv.attributeoptioncomboid = aoc.categoryoptioncomboid
-        WHERE dv.lastupdated >= :lastUpdated""",
+        WHERE dv.lastupdated >= :lastUpdated
+        ORDER BY pe.startdate, pe.enddate, dv.created, deid""",
         Set.of("lastUpdated"),
         createExportQuery(params, createSpyQuery(), new SystemUser(), null));
     // pin the actual bound value: the WHERE clause must be backed by the exact filter date,
@@ -543,7 +544,8 @@ class DataExportQueryBuilderTest extends AbstractQueryBuilderTest {
         JOIN organisationunit ou ON dv.sourceid = ou.organisationunitid
         JOIN categoryoptioncombo coc ON dv.categoryoptioncomboid = coc.categoryoptioncomboid
         JOIN categoryoptioncombo aoc ON dv.attributeoptioncomboid = aoc.categoryoptioncomboid
-        WHERE dv.lastupdated >= :lastUpdated""",
+        WHERE dv.lastupdated >= :lastUpdated
+        ORDER BY pe.startdate, pe.enddate, dv.created, deid""",
         Set.of("lastUpdated"),
         createExportQuery(params, createSpyQuery(), new SystemUser(), null));
     long after = System.currentTimeMillis();
