@@ -137,7 +137,9 @@ public class DefaultOrgUnitMergeService implements OrgUnitMergeService {
     // Moving the sources out of data sets, programs and groups loads their whole org unit sets
     // into the session. With the default flush mode every later query in the handlers then
     // dirty-checks all of those entities first. None of the handlers' queries read the changes
-    // made in memory, so flush them once, before the sources are deleted, instead.
+    // made in memory, so flush them once, before the sources are deleted, instead. Changes made
+    // before the merge started are flushed up front, as the handlers' queries may read them.
+    entityManager.flush();
     FlushModeType flushMode = entityManager.getFlushMode();
     entityManager.setFlushMode(FlushModeType.COMMIT);
 
