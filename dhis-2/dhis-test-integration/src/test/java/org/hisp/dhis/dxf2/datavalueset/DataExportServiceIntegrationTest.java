@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,6 +102,8 @@ import org.hisp.dhis.period.PeriodType;
 import org.hisp.dhis.period.PeriodTypeEnum;
 import org.hisp.dhis.scheduling.JobProgress;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
+import org.hisp.dhis.user.User;
+import org.hisp.dhis.user.sharing.Sharing;
 import org.intellij.lang.annotations.Language;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -998,6 +1000,25 @@ class DataExportServiceIntegrationTest extends PostgresIntegrationTestBase {
     assertEquals(ErrorCode.E8022, conflict.getErrorCode());
     assertEquals(
         "Data set pBOMPrpg1QX not usable with org unit(s): `[j7Hg26FpoIa]`", conflict.getValue());
+  }
+
+  @Test
+  void testImportDataValuesWithOrgUnitOutsideUserHierarchy() {
+    dsA.setSharing(Sharing.builder().publicAccess("rwrw----").build());
+    dataSetService.updateDataSet(dsA);
+    User user = createAndAddUser("dataEntryUser", ouA);
+    injectSecurityContextUser(user);
+
+    ImportSummary summary = importXml(readFile("dxf2/datavalueset/dataValueSetE.xml"));
+
+    assertEquals(ImportStatus.ERROR, summary.getStatus());
+    assertEquals(1, summary.getConflictCount());
+    ImportConflict conflict = summary.getConflicts().iterator().next();
+    assertEquals(ErrorCode.E8011, conflict.getErrorCode());
+    assertEquals(
+        "Current user cannot enter data for org unit(s): `[j7Hg26FpoIa]` (user: `%s`)"
+            .formatted(user.getUid()),
+        conflict.getValue());
   }
 
   @Test
