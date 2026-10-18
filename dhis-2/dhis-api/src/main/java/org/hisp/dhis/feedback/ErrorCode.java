@@ -712,9 +712,10 @@ public enum ErrorCode {
       "Data set `completeDate` requires data set, org unit, period and attribute option combo to be defined at the group level."),
 
   // set level current user access issues: Current user cannot enter...
-  E8010("Current user cannot enter data for data set: `${ds:{0}}`"),
-  E8011("Current user cannot enter data for org unit(s): `${units:{0}}`"),
-  E8012("Current user cannot enter data for category option(s): `${options:{0}}`"),
+  E8010("Current user cannot enter data for data set: `${ds:{0}}` (user: `${user:{1}}`)"),
+  E8011("Current user cannot enter data for org unit(s): `${units:{0}}` (user: `${user:{1}}`)"),
+  E8012(
+      "Current user cannot enter data for category option(s): `${options:{0}}` (user: `${user:{1}}`)"),
   // set level model consistency issues: X not usable with Y
   E8020("Data set ${ds:{0}} not usable with data element(s): `${elements:{1}}`"),
   E8021("Data set ${ds:{0}} not usable with period(s): `${periods:{1}}`"),

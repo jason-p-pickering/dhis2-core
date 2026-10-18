@@ -600,18 +600,20 @@ public class DefaultDataEntryService implements DataEntryService, DataDumpServic
     UserDetails user = getCurrentUserDetails();
     if (user.isSuper()) return; // super can always write
 
+    UID userId = UID.of(user.getUid());
+
     // - require: DS ACL check canDataWrite
     boolean dsNoAccess = store.getDataSetCanDataWrite(ds);
-    if (!dsNoAccess) throw new ConflictException(ErrorCode.E8010, ds);
+    if (!dsNoAccess) throw new ConflictException(ErrorCode.E8010, ds, userId);
 
     // - require: OUs are in user hierarchy
-    UID userId = UID.of(user.getUid());
     List<String> noAccessOrgUnits = store.getOrgUnitsNotInUserHierarchy(userId, source.orgUnits());
-    if (!noAccessOrgUnits.isEmpty()) throw new ConflictException(ErrorCode.E8011, noAccessOrgUnits);
+    if (!noAccessOrgUnits.isEmpty())
+      throw new ConflictException(ErrorCode.E8011, noAccessOrgUnits, userId);
 
     // - require: AOCs + COCs => COs : ACL canDataWrite
     List<String> coNoAccess = store.getCategoryOptionsCanNotDataWrite(source.optionCombos());
-    if (!coNoAccess.isEmpty()) throw new ConflictException(ErrorCode.E8012, coNoAccess);
+    if (!coNoAccess.isEmpty()) throw new ConflictException(ErrorCode.E8012, coNoAccess, userId);
   }
 
   /**
