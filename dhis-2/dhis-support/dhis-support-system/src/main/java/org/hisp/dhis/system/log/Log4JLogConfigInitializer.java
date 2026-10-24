@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,8 @@ package org.hisp.dhis.system.log;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.hisp.dhis.log.MdcKeys.MDC_REQUEST_ID;
+import static org.hisp.dhis.log.MdcKeys.MDC_USER_ID;
 
 import com.google.common.collect.Lists;
 import java.io.File;
@@ -68,8 +70,22 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component("logInitializer")
 public class Log4JLogConfigInitializer implements LogConfigInitializer {
+  /**
+   * Layout of the dhis*.log files. The request ID and user UID are appended only when they are in
+   * the MDC (set by RequestIdFilter and UserIdFilter), so lines logged outside a request are
+   * unchanged.
+   */
+  static final String LOG_PATTERN =
+      "* %-5p %d{ISO8601} %m (%F [%t])"
+          + "%notEmpty{ rid=%X{"
+          + MDC_REQUEST_ID
+          + "}}"
+          + "%notEmpty{ uid=%X{"
+          + MDC_USER_ID
+          + "}}%n";
+
   private final PatternLayout PATTERN_LAYOUT =
-      PatternLayout.newBuilder().withPattern("* %-5p %d{ISO8601} %m (%F [%t])%n").build();
+      PatternLayout.newBuilder().withPattern(LOG_PATTERN).build();
 
   private static final String LOG_DIR = "logs";
 
