@@ -109,6 +109,7 @@ public final class QueryBuilder {
   private final Set<String> eqParams = new HashSet<>();
   private Integer limit;
   private Integer offset;
+  private Integer fetchSize;
 
   public <T> QueryBuilder setParameter(String name, Collection<T> value, Function<T, String> f) {
     return setParameter(name, value == null ? Stream.empty() : value.stream(), f);
@@ -232,6 +233,18 @@ public final class QueryBuilder {
   }
 
   /**
+   * Hint to the underlying driver on how many rows to fetch per round trip. Only useful for large
+   * streamed result sets (see {@link #stream()}); has no effect for {@link #count()}.
+   *
+   * @param fetchSize number of rows to fetch per round trip, or null for no hint
+   * @return this for chaining
+   */
+  public QueryBuilder setFetchSize(@CheckForNull Integer fetchSize) {
+    this.fetchSize = fetchSize == null ? null : Math.abs(fetchSize);
+    return this;
+  }
+
+  /**
    * When this method is called all null (or empty array) parameters set thus far will be erased.
    * Null parameters set afterward are kept to allow using a mix where some parameter can be set to
    * null and kept.
@@ -325,6 +338,7 @@ public final class QueryBuilder {
         .forEach(query::setParameter);
     if (offset != null) query.setOffset(offset);
     if (limit != null) query.setLimit(limit);
+    if (fetchSize != null) query.setFetchSize(fetchSize);
     return query;
   }
 
