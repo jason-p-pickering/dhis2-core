@@ -81,6 +81,7 @@ import org.hisp.dhis.analytics.QueryKey;
 import org.hisp.dhis.analytics.QueryParamsBuilder;
 import org.hisp.dhis.analytics.SortOrder;
 import org.hisp.dhis.analytics.TimeField;
+import org.hisp.dhis.analytics.event.data.ou.TrackerOrgUnitDimension;
 import org.hisp.dhis.analytics.event.data.programindicator.disag.PiDisagInfo;
 import org.hisp.dhis.analytics.table.model.Partitions;
 import org.hisp.dhis.common.AnalyticsDateFilter;
@@ -142,6 +143,8 @@ public class EventQueryParams extends DataQueryParams {
 
   public static final String TRACKER_COORDINATE_FIELD = "TRACKER";
 
+  public record GeometrySource(String coordinateField, String source) {}
+
   /** The query items. */
   private List<QueryItem> items = new ArrayList<>();
 
@@ -159,6 +162,9 @@ public class EventQueryParams extends DataQueryParams {
 
   /** The incoming "value" param from the request. */
   private String requestValue;
+
+  /** The program stage the "value" data element is read from in enrollment aggregate queries. */
+  private ProgramStage valueProgramStage;
 
   /** Program indicators specified as dimensional items of the data dimension. */
   private List<ProgramIndicator> itemProgramIndicators = new ArrayList<>();
@@ -227,6 +233,9 @@ public class EventQueryParams extends DataQueryParams {
    */
   private List<String> coordinateFields;
 
+  /** The ordered source labels for resolved coordinate fields. */
+  private List<GeometrySource> geometrySources = List.of();
+
   /** Bounding box for events to include in clustering. */
   private String bbox;
 
@@ -268,20 +277,29 @@ public class EventQueryParams extends DataQueryParams {
 
   @Getter protected List<OrganisationUnit> userOrgUnits = new ArrayList<>();
 
-  /** Items when ENROLLMENT_OU is used as a dimension. */
-  private List<DimensionalItemObject> enrollmentOuDimensionItems = new ArrayList<>();
+  /**
+   * Org units when ENROLLMENT_OU is used as a dimension, already expanded from any keyword form and
+   * therefore carrying their hierarchy level.
+   */
+  private List<OrganisationUnit> enrollmentOuDimensionItems = new ArrayList<>();
 
-  /** Items when ENROLLMENT_OU is used as a filter. */
-  private List<DimensionalItemObject> enrollmentOuFilterItems = new ArrayList<>();
+  /** Org units when ENROLLMENT_OU is used as a filter. */
+  private List<OrganisationUnit> enrollmentOuFilterItems = new ArrayList<>();
 
-  /** Level constraints when ENROLLMENT_OU is used as a dimension. */
-  private Set<Integer> enrollmentOuDimensionLevels = new LinkedHashSet<>();
+  /**
+   * Org units when REGISTRATION_OU is used as a dimension, already expanded from any keyword form
+   * and therefore carrying their hierarchy level.
+   */
+  private List<OrganisationUnit> registrationOuDimensionItems = new ArrayList<>();
 
-  /** Level constraints when ENROLLMENT_OU is used as a filter. */
-  private Set<Integer> enrollmentOuFilterLevels = new LinkedHashSet<>();
+  /** Org units when REGISTRATION_OU is used as a filter. */
+  private List<OrganisationUnit> registrationOuFilterItems = new ArrayList<>();
 
-  /** Whether ENROLLMENT_OU dimension was requested via relative keywords (e.g. USER_ORGUNIT). */
-  private boolean enrollmentOuDimensionHierarchical = false;
+  /**
+   * Whether REGISTRATION_OU was named as a dimension, independently of whether it carries items. A
+   * dimension without items projects the output columns without restricting any rows.
+   */
+  private boolean registrationOuDimensionRequested = false;
 
   // -------------------------------------------------------------------------
   // Constructors
@@ -317,6 +335,7 @@ public class EventQueryParams extends DataQueryParams {
     params.itemFilters = new ArrayList<>(this.itemFilters);
     params.value = this.value;
     params.requestValue = this.requestValue;
+    params.valueProgramStage = this.valueProgramStage;
     params.itemProgramIndicators = new ArrayList<>(this.itemProgramIndicators);
     params.programIndicator = this.programIndicator;
     params.option = this.option;
@@ -340,6 +359,7 @@ public class EventQueryParams extends DataQueryParams {
     params.aggregateData = this.aggregateData;
     params.clusterSize = this.clusterSize;
     params.coordinateFields = this.coordinateFields;
+    params.geometrySources = new ArrayList<>(this.geometrySources);
     params.bbox = this.bbox;
     params.includeClusterPoints = this.includeClusterPoints;
     params.enrollmentStatus = new LinkedHashSet<>(this.enrollmentStatus);
@@ -360,9 +380,9 @@ public class EventQueryParams extends DataQueryParams {
     params.piDisagInfo = this.piDisagInfo;
     params.enrollmentOuDimensionItems = new ArrayList<>(this.enrollmentOuDimensionItems);
     params.enrollmentOuFilterItems = new ArrayList<>(this.enrollmentOuFilterItems);
-    params.enrollmentOuDimensionLevels = new LinkedHashSet<>(this.enrollmentOuDimensionLevels);
-    params.enrollmentOuFilterLevels = new LinkedHashSet<>(this.enrollmentOuFilterLevels);
-    params.enrollmentOuDimensionHierarchical = this.enrollmentOuDimensionHierarchical;
+    params.registrationOuDimensionItems = new ArrayList<>(this.registrationOuDimensionItems);
+    params.registrationOuFilterItems = new ArrayList<>(this.registrationOuFilterItems);
+    params.registrationOuDimensionRequested = this.registrationOuDimensionRequested;
     return params;
   }
 
@@ -600,6 +620,14 @@ public class EventQueryParams extends DataQueryParams {
     }
   }
 
+  /**
+   * Returns the cache key component for an org unit item. The level is included for org units as it
+   * determines which uidlevel column is used in the SQL.
+   */
+  private static String getOrgUnitKeyComponent(DimensionalItemObject item) {
+    return item instanceof OrganisationUnit ou ? ou.getUid() + ":" + ou.getLevel() : item.getUid();
+  }
+
   /** Returns a unique key representing this query. The key is suitable for caching. */
   @Override
   public String getKey() {
@@ -610,11 +638,28 @@ public class EventQueryParams extends DataQueryParams {
     headers.forEach(header -> key.add("headers", "[" + header + "]"));
     itemProgramIndicators.forEach(e -> key.add("itemProgramIndicator", e.getUid()));
     eventStatus.forEach(status -> key.add("eventStatus", "[" + status + "]"));
-    asc.forEach(e -> e.getItem().getUid());
-    desc.forEach(e -> e.getItem().getUid());
+    asc.forEach(e -> key.add("asc", "[" + e.getItem().getUid() + "]"));
+    desc.forEach(e -> key.add("desc", "[" + e.getItem().getUid() + "]"));
+
+    if (hasRegistrationOu()) {
+      key.add("registrationOuDimensionRequested", registrationOuDimensionRequested);
+      registrationOuDimensionItems.forEach(
+          ou -> key.add("registrationOuDimension", ou.getUid() + ":" + ou.getLevel()));
+      registrationOuFilterItems.forEach(
+          ou -> key.add("registrationOuFilter", ou.getUid() + ":" + ou.getLevel()));
+    }
+
+    // Enrollment OU selections are also stored outside the generic dimensions and filters.
+    if (hasEnrollmentOu()) {
+      enrollmentOuDimensionItems.forEach(
+          ou -> key.add("enrollmentOuDimension", getOrgUnitKeyComponent(ou)));
+      enrollmentOuFilterItems.forEach(
+          ou -> key.add("enrollmentOuFilter", getOrgUnitKeyComponent(ou)));
+    }
 
     return key.addIgnoreNull("value", value, () -> value.getUid())
         .addIgnoreNull("requestValue", requestValue)
+        .addIgnoreNull("valueProgramStage", valueProgramStage, () -> valueProgramStage.getUid())
         .addIgnoreNull("programIndicator", programIndicator, () -> programIndicator.getUid())
         .addIgnoreNull("programStage", programStage, () -> programStage.getUid())
         .addIgnoreNull("organisationUnitMode", organisationUnitMode)
@@ -631,6 +676,7 @@ public class EventQueryParams extends DataQueryParams {
         .addIgnoreNull("aggregateData", aggregateData)
         .addIgnoreNull("clusterSize", clusterSize)
         .addIgnoreNull("coordinateFields", coordinateFields)
+        .addIgnoreNull("geometrySources", geometrySources.isEmpty() ? null : geometrySources)
         .addIgnoreNull("bbox", bbox)
         .addIgnoreNull("includeClusterPoints", includeClusterPoints)
         .addIgnoreNull("enrollmentStatus", enrollmentStatus)
@@ -779,6 +825,20 @@ public class EventQueryParams extends DataQueryParams {
   public boolean hasStageSpecificItem() {
     return getItemsAndItemFilters().stream()
         .anyMatch(item -> item.hasProgramStage() && isStageSpecificDimension(item));
+  }
+
+  /**
+   * Returns the program stage of stage-specific dimension identifiers requested without items (e.g.
+   * {@code stageUid.EVENT_STATUS}). Such items carry no filter, so no per-item stage condition is
+   * rendered for them and the stage must be restricted at query level. Stage-specific items in a
+   * single query always share one stage.
+   */
+  public Optional<ProgramStage> getStageOfStageSpecificItemsWithoutFilter() {
+    return getItemsAndItemFilters().stream()
+        .filter(item -> item.hasProgramStage() && isStageSpecificDimension(item))
+        .filter(item -> !item.hasFilter())
+        .map(QueryItem::getProgramStage)
+        .findFirst();
   }
 
   /**
@@ -1286,54 +1346,81 @@ public class EventQueryParams extends DataQueryParams {
   }
 
   public boolean hasEnrollmentOuDimension() {
-    return isNotEmpty(enrollmentOuDimensionItems) || !enrollmentOuDimensionLevels.isEmpty();
+    return isNotEmpty(enrollmentOuDimensionItems);
+  }
+
+  /** Returns true if REGISTRATION_OU was named as a dimension, with or without items. */
+  public boolean hasRegistrationOuDimension() {
+    return registrationOuDimensionRequested;
+  }
+
+  public boolean hasRegistrationOuFilter() {
+    return isNotEmpty(registrationOuFilterItems);
+  }
+
+  /** Returns true if REGISTRATION_OU was named at all, as a dimension or as a filter. */
+  public boolean hasRegistrationOu() {
+    return hasRegistrationOuDimension() || hasRegistrationOuFilter();
+  }
+
+  /**
+   * Returns true if the REGISTRATION_OU dimension carries org units, which is the condition for the
+   * aggregate disaggregation column to exist. A dimension named without org units projects the
+   * query output columns but has nothing to group by.
+   */
+  public boolean hasRegistrationOuAggregateColumn() {
+    return isNotEmpty(registrationOuDimensionItems);
+  }
+
+  /**
+   * Returns true if REGISTRATION_OU restricts the query, i.e. carries org units as a dimension or
+   * as a filter. A dimension named without items does not restrict anything and so does not count
+   * as an organisation unit condition.
+   */
+  public boolean hasRegistrationOuRestriction() {
+    return isNotEmpty(registrationOuDimensionItems) || isNotEmpty(registrationOuFilterItems);
+  }
+
+  public List<OrganisationUnit> getRegistrationOuDimensionItems() {
+    return registrationOuDimensionItems;
+  }
+
+  public List<OrganisationUnit> getRegistrationOuFilterItems() {
+    return registrationOuFilterItems;
+  }
+
+  /** Returns the REGISTRATION_OU org units from both the dimension and the filter. */
+  public List<OrganisationUnit> getAllRegistrationOuItems() {
+    return ListUtils.union(registrationOuDimensionItems, registrationOuFilterItems);
   }
 
   public boolean hasEnrollmentOuFilter() {
-    return isNotEmpty(enrollmentOuFilterItems) || !enrollmentOuFilterLevels.isEmpty();
+    return isNotEmpty(enrollmentOuFilterItems);
   }
 
   public boolean hasEnrollmentOu() {
     return hasEnrollmentOuDimension() || hasEnrollmentOuFilter();
   }
 
-  public List<DimensionalItemObject> getEnrollmentOuDimensionItems() {
+  /** Returns the first sort item that reads an enrollment org unit column, if any. */
+  public Optional<String> getEnrollmentOuSortColumn() {
+    return Stream.concat(asc.stream(), desc.stream())
+        .map(QueryItem::getItemId)
+        .filter(TrackerOrgUnitDimension.ENROLLMENT_OU.outputColumns()::contains)
+        .findFirst();
+  }
+
+  public List<OrganisationUnit> getEnrollmentOuDimensionItems() {
     return enrollmentOuDimensionItems;
   }
 
-  public List<DimensionalItemObject> getEnrollmentOuFilterItems() {
+  public List<OrganisationUnit> getEnrollmentOuFilterItems() {
     return enrollmentOuFilterItems;
   }
 
   /** Returns all enrollment OU items from both dimension and filter. */
-  public List<DimensionalItemObject> getAllEnrollmentOuItems() {
+  public List<OrganisationUnit> getAllEnrollmentOuItems() {
     return ListUtils.union(enrollmentOuDimensionItems, enrollmentOuFilterItems);
-  }
-
-  public Set<Integer> getEnrollmentOuDimensionLevels() {
-    return enrollmentOuDimensionLevels;
-  }
-
-  public Set<Integer> getEnrollmentOuFilterLevels() {
-    return enrollmentOuFilterLevels;
-  }
-
-  public boolean isEnrollmentOuDimensionHierarchical() {
-    return enrollmentOuDimensionHierarchical;
-  }
-
-  public boolean hasEnrollmentOuLevelConstraint() {
-    return !enrollmentOuDimensionLevels.isEmpty() || !enrollmentOuFilterLevels.isEmpty();
-  }
-
-  public Set<Integer> getAllEnrollmentOuLevelsForSql() {
-    Set<Integer> levels = new LinkedHashSet<>(enrollmentOuDimensionLevels);
-    levels.addAll(enrollmentOuFilterLevels);
-    return levels;
-  }
-
-  public List<DimensionalItemObject> getAllEnrollmentOuItemsForSql() {
-    return getAllEnrollmentOuItems();
   }
 
   /**
@@ -1399,6 +1486,14 @@ public class EventQueryParams extends DataQueryParams {
 
   public String getRequestValue() {
     return requestValue;
+  }
+
+  public ProgramStage getValueProgramStage() {
+    return valueProgramStage;
+  }
+
+  public boolean hasValueProgramStage() {
+    return valueProgramStage != null;
   }
 
   public List<ProgramIndicator> getItemProgramIndicators() {
@@ -1493,6 +1588,14 @@ public class EventQueryParams extends DataQueryParams {
 
   public List<String> getCoordinateFields() {
     return coordinateFields;
+  }
+
+  public List<GeometrySource> getGeometrySources() {
+    return geometrySources;
+  }
+
+  public boolean hasGeometrySources() {
+    return isNotEmpty(geometrySources);
   }
 
   public String getBbox() {
@@ -1644,6 +1747,11 @@ public class EventQueryParams extends DataQueryParams {
 
     public Builder withRequestValue(String requestValue) {
       this.params.requestValue = requestValue;
+      return this;
+    }
+
+    public Builder withValueProgramStage(ProgramStage valueProgramStage) {
+      this.params.valueProgramStage = valueProgramStage;
       return this;
     }
 
@@ -1812,6 +1920,11 @@ public class EventQueryParams extends DataQueryParams {
       return this;
     }
 
+    public Builder withGeometrySources(List<GeometrySource> geometrySources) {
+      this.params.geometrySources = geometrySources == null ? List.of() : geometrySources;
+      return this;
+    }
+
     public Builder withBbox(String bbox) {
       this.params.bbox = bbox;
       return this;
@@ -1910,28 +2023,24 @@ public class EventQueryParams extends DataQueryParams {
       return this;
     }
 
-    public Builder withEnrollmentOuDimension(List<DimensionalItemObject> items) {
-      this.params.enrollmentOuDimensionItems = items;
+    public Builder withEnrollmentOuDimension(List<OrganisationUnit> items) {
+      this.params.enrollmentOuDimensionItems = new ArrayList<>(items);
       return this;
     }
 
-    public Builder withEnrollmentOuFilter(List<DimensionalItemObject> items) {
-      this.params.enrollmentOuFilterItems = items;
+    public Builder withEnrollmentOuFilter(List<OrganisationUnit> items) {
+      this.params.enrollmentOuFilterItems = new ArrayList<>(items);
       return this;
     }
 
-    public Builder withEnrollmentOuDimensionLevels(Set<Integer> levels) {
-      this.params.enrollmentOuDimensionLevels = new LinkedHashSet<>(levels);
+    public Builder withRegistrationOuDimension(List<OrganisationUnit> items) {
+      this.params.registrationOuDimensionItems = new ArrayList<>(items);
+      this.params.registrationOuDimensionRequested = true;
       return this;
     }
 
-    public Builder withEnrollmentOuFilterLevels(Set<Integer> levels) {
-      this.params.enrollmentOuFilterLevels = new LinkedHashSet<>(levels);
-      return this;
-    }
-
-    public Builder withEnrollmentOuDimensionHierarchical(boolean hierarchical) {
-      this.params.enrollmentOuDimensionHierarchical = hierarchical;
+    public Builder withRegistrationOuFilter(List<OrganisationUnit> items) {
+      this.params.registrationOuFilterItems = new ArrayList<>(items);
       return this;
     }
 

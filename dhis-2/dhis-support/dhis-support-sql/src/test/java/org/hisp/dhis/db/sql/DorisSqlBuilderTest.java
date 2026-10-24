@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,7 @@ package org.hisp.dhis.db.sql;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.hisp.dhis.db.model.Collation;
@@ -98,6 +99,42 @@ class DorisSqlBuilderTest {
     return new Table("immunization", columns, List.of(), sortKey, List.of(), Logged.LOGGED);
   }
 
+  /**
+   * A table whose primary key column ("id") is not the first column, mirroring the aggregate
+   * (JdbcAnalyticsTableManager) and completeness (JdbcCompletenessTableManager) analytics tables,
+   * where "id" is not a leading column.
+   */
+  private Table getTableE() {
+    List<Column> columns =
+        List.of(
+            new Column("data", DataType.CHARACTER_11, Nullable.NOT_NULL),
+            new Column("period", DataType.VARCHAR_50, Nullable.NOT_NULL),
+            new Column("id", DataType.BIGINT, Nullable.NOT_NULL),
+            new Column("value", DataType.DOUBLE));
+
+    List<String> primaryKey = List.of("id");
+
+    return new Table("immunization", columns, primaryKey, Logged.LOGGED);
+  }
+
+  /**
+   * A table with a composite primary key ("id", "year") where the natural column order (`year`
+   * before `id`) does not match the declared key order (`id` before `year`) — mirrors the
+   * aggregate/completeness analytics tables, where `year` is a `FIXED_COLS` entry appended before
+   * the `id` column, but the Doris unique key clause must declare `id` first.
+   */
+  private Table getTableF() {
+    List<Column> columns =
+        List.of(
+            new Column("year", DataType.INTEGER, Nullable.NOT_NULL),
+            new Column("id", DataType.BIGINT, Nullable.NOT_NULL),
+            new Column("data", DataType.CHARACTER_11, Nullable.NOT_NULL));
+
+    List<String> primaryKey = List.of("id", "year");
+
+    return new Table("immunization", columns, primaryKey, Logged.LOGGED);
+  }
+
   // Data types
 
   @Test
@@ -105,6 +142,21 @@ class DorisSqlBuilderTest {
     assertEquals("double", sqlBuilder.dataTypeDouble());
     assertEquals("datetime(3)", sqlBuilder.dataTypeTimestamp());
     assertEquals("json", sqlBuilder.dataTypeJson());
+    // Doris' "string" type is unbounded and rejected as a key column on any key model (errCode =
+    // 2, "String Type should not be used in key column"). Callers that need a column to be a key
+    // (e.g. analytics table managers building a synthetic "id" key column) must use a bounded
+    // type (e.g. VARCHAR_255) instead of TEXT on Doris.
+    assertEquals("string", sqlBuilder.dataTypeText());
+  }
+
+  @Test
+  void testDataTypeVarchar() {
+    // PostgreSQL varchar(n) limits characters, Doris varchar(n) limits bytes, so the length
+    // must be widened to accommodate multi-byte UTF-8 characters (e.g. Burmese, Chinese, Thai).
+    assertEquals("varchar(200)", sqlBuilder.dataTypeVarchar(50));
+    assertEquals("varchar(1020)", sqlBuilder.dataTypeVarchar(255));
+    // Capped at the Doris varchar byte limit.
+    assertEquals("varchar(65533)", sqlBuilder.dataTypeVarchar(20000));
   }
 
   // Index types
@@ -124,6 +176,16 @@ class DorisSqlBuilderTest {
   @Test
   void testSupportsVacuum() {
     assertFalse(sqlBuilder.supportsVacuum());
+  }
+
+  @Test
+  void testSupportsContinuousAnalytics() {
+    assertTrue(sqlBuilder.supportsContinuousAnalytics());
+  }
+
+  @Test
+  void testRequiresUniqueKeyAnalyticsTables() {
+    assertTrue(sqlBuilder.requiresUniqueKeyAnalyticsTables());
   }
 
   // Utilities
@@ -156,7 +218,7 @@ class DorisSqlBuilderTest {
     String expected =
         """
         create table `immunization` (`id` bigint not null,`data` char(11) not null,\
-        `period` varchar(50) not null,`created` datetime(3) null,`user` json null,\
+        `period` varchar(200) not null,`created` datetime(3) null,`user` json null,\
         `value` double null) \
         engine = olap \
         unique key (`id`) \
@@ -174,7 +236,7 @@ class DorisSqlBuilderTest {
     String expected =
         """
         create table `vaccination` (`id` int not null,\
-        `facility_type` varchar(255) null,`bcg_doses` double null) \
+        `facility_type` varchar(1020) null,`bcg_doses` double null) \
         engine = olap \
         duplicate key (`id`) \
         distributed by hash(`id`) \
@@ -207,9 +269,43 @@ class DorisSqlBuilderTest {
     String expected =
         """
         create table `immunization` (`id` bigint not null,`data` char(11) not null,\
-        `period` varchar(50) not null,`value` double null) \
+        `period` varchar(200) not null,`value` double null) \
         engine = olap \
         duplicate key (`id`) \
+        distributed by hash(`id`) \
+        buckets 10 \
+        properties ("replication_num" = "1");""";
+
+    assertEquals(expected, sqlBuilder.createTable(table));
+  }
+
+  @Test
+  void testCreateTableOrdersPrimaryKeyColumnFirst() {
+    Table table = getTableE();
+
+    String expected =
+        """
+        create table `immunization` (`id` bigint not null,`data` char(11) not null,\
+        `period` varchar(200) not null,`value` double null) \
+        engine = olap \
+        unique key (`id`) \
+        distributed by hash(`id`) \
+        buckets 10 \
+        properties ("replication_num" = "1");""";
+
+    assertEquals(expected, sqlBuilder.createTable(table));
+  }
+
+  @Test
+  void testCreateTableOrdersCompositePrimaryKeyByDeclaredKeyOrder() {
+    Table table = getTableF();
+
+    String expected =
+        """
+        create table `immunization` (`id` bigint not null,`year` int not null,\
+        `data` char(11) not null) \
+        engine = olap \
+        unique key (`id`,`year`) \
         distributed by hash(`id`) \
         buckets 10 \
         properties ("replication_num" = "1");""";
@@ -274,10 +370,15 @@ class DorisSqlBuilderTest {
         """
         select t.table_name \
         from information_schema.tables t \
-        where t.table_schema = 'public' \
+        where t.table_schema = database() \
         and t.table_name = 'immunization';""";
 
     assertEquals(expected, sqlBuilder.tableExists("immunization"));
+  }
+
+  @Test
+  void testShowCreateTable() {
+    assertEquals("show create table `immunization`;", sqlBuilder.showCreateTable("immunization"));
   }
 
   @Test

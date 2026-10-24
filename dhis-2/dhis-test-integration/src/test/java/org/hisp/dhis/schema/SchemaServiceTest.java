@@ -36,11 +36,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashSet;
 import org.hisp.dhis.category.CategoryCombo;
+import org.hisp.dhis.category.CategoryOption;
 import org.hisp.dhis.dashboard.DashboardItem;
+import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataexchange.aggregate.AggregateDataExchange;
+import org.hisp.dhis.dataset.DataSet;
+import org.hisp.dhis.expressiondimensionitem.ExpressionDimensionItem;
+import org.hisp.dhis.indicator.Indicator;
+import org.hisp.dhis.mapping.MapView;
 import org.hisp.dhis.message.Message;
+import org.hisp.dhis.option.OptionGroup;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
+import org.hisp.dhis.organisationunit.OrganisationUnitGroup;
 import org.hisp.dhis.program.Program;
+import org.hisp.dhis.program.ProgramIndicator;
 import org.hisp.dhis.program.ProgramTrackedEntityAttribute;
 import org.hisp.dhis.scheduling.JobConfiguration;
 import org.hisp.dhis.scheduling.JobParameters;
@@ -49,9 +58,12 @@ import org.hisp.dhis.sms.config.BulkSmsGatewayConfig;
 import org.hisp.dhis.sqlview.SqlView;
 import org.hisp.dhis.system.util.ReflectionUtils;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
+import org.hisp.dhis.trackedentity.TrackedEntityAttribute;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -180,5 +192,35 @@ class SchemaServiceTest extends PostgresIntegrationTestBase {
     Schema schema = schemaService.getSchema(Message.class);
     Property text = schema.getProperty("text");
     assertEquals(Integer.MAX_VALUE, text.getLength());
+  }
+
+  @Test
+  void testMapViewSchemaRegistered() {
+    Schema schema = schemaService.getSchema(MapView.class);
+    assertNotNull(schema);
+    assertEquals(MapView.class, schema.getKlass());
+    assertTrue(schema.isEmbeddedObject());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      classes = {
+        CategoryOption.class,
+        DataElement.class,
+        DataSet.class,
+        ExpressionDimensionItem.class,
+        Indicator.class,
+        OptionGroup.class,
+        OrganisationUnit.class,
+        OrganisationUnitGroup.class,
+        ProgramIndicator.class,
+        TrackedEntityAttribute.class
+      })
+  void testDimensionItemTypeIsSchemaProperty(Class<?> klass) {
+    Schema schema = schemaService.getSchema(klass);
+    assertNotNull(schema);
+    Property property = schema.getProperty("dimensionItemType");
+    assertNotNull(property, "dimensionItemType is not a property of " + klass.getSimpleName());
+    assertTrue(property.isReadable());
   }
 }

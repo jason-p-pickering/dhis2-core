@@ -6,15 +6,13 @@
 <hibernate-mapping>
   <class name="org.hisp.dhis.period.PeriodType" table="periodtype">
 
-    <cache usage="read-write" />
+    <cache usage="nonstrict-read-write" />
 
     <id name="id" column="periodtypeid">
       <generator class="native" />
     </id>
 
     <discriminator column="name" type="string" length="50" not-null="true" />
-
-    <property name="label" not-null="false" type="string" length="230" />
 
     <subclass name="org.hisp.dhis.period.DailyPeriodType" discriminator-value="Daily" />
     <subclass name="org.hisp.dhis.period.WeeklyPeriodType" discriminator-value="Weekly" />

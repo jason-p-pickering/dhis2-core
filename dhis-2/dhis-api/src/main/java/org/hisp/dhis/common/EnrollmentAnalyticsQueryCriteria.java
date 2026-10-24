@@ -35,6 +35,7 @@ import java.util.Set;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hisp.dhis.analytics.AggregationType;
 import org.hisp.dhis.analytics.SortOrder;
 import org.hisp.dhis.program.EnrollmentStatus;
 
@@ -125,6 +126,9 @@ public class EnrollmentAnalyticsQueryCriteria extends AnalyticsPagingCriteria {
 
   private SortOrder sortOrder;
 
+  /** The max limit of records to return. */
+  private Integer limit;
+
   private boolean totalPages;
 
   /** flag to enable enhanced OR conditions on queryItem dimensions/filters */
@@ -132,6 +136,15 @@ public class EnrollmentAnalyticsQueryCriteria extends AnalyticsPagingCriteria {
 
   /** flag to enable row context in grid response */
   private boolean rowContext;
+
+  /**
+   * Value dimension identifier: a data element prefixed with its program stage, or a program
+   * attribute. Valid for aggregate enrollment analytics only.
+   */
+  private String value;
+
+  /** Aggregation type for the value dimension. Valid for aggregate enrollment analytics only. */
+  private AggregationType aggregationType;
 
   /** Returns true when parameters are incoming from analytics enrollments/aggregate endpoint. */
   public boolean isAggregatedEnrollments() {

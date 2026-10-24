@@ -373,12 +373,17 @@ public class EventDataQueryRequest {
               .userOrgUnit(criteria.getUserOrgUnit())
               .coordinateField(criteria.getCoordinateField())
               .sortOrder(criteria.getSortOrder())
+              .limit(criteria.getLimit())
               .totalPages(criteria.isTotalPages())
               .endpointItem(criteria.getEndpointItem())
               .endpointAction(criteria.getEndpointAction())
               .enhancedConditions(criteria.isEnhancedConditions())
               .userOrganisationUnitCriteria(getAnalyticsQueryCriteria(criteria.getDimension()))
               .rowContext(criteria.isRowContext());
+
+      if (criteria.isAggregatedEnrollments()) {
+        builder.value(criteria.getValue()).aggregationType(criteria.getAggregationType());
+      }
 
       if (criteria.getDimension() == null) {
         criteria.setDimension(new HashSet<>());

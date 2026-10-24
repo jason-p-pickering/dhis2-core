@@ -35,6 +35,7 @@ import static org.hisp.dhis.user.CurrentUserUtil.getCurrentUsername;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.hisp.dhis.common.IllegalQueryException;
@@ -69,7 +70,7 @@ public class DefaultTrackedEntityAttributeValueService
     trackedEntityChangeLogService.addTrackedEntityChangeLog(
         attributeValue.getTrackedEntity(),
         attributeValue.getAttribute(),
-        attributeValue.getPlainValue(),
+        attributeValue.getValue(),
         null,
         DELETE,
         getCurrentUsername());
@@ -94,12 +95,6 @@ public class DefaultTrackedEntityAttributeValueService
       throw new IllegalQueryException("Attribute or type is null or empty");
     }
 
-    if (attributeValue.getAttribute().isConfidentialBool()
-        && !config.getEncryptionStatus().isOk()) {
-      throw new IllegalStateException(
-          "Unable to encrypt data, encryption is not correctly configured");
-    }
-
     String result =
         valueIsValid(attributeValue.getValue(), attributeValue.getAttribute().getValueType());
 
@@ -118,12 +113,6 @@ public class DefaultTrackedEntityAttributeValueService
 
     if (attributeValue.getValue() != null) {
       attributeValueStore.saveVoid(attributeValue);
-
-      if (Boolean.TRUE.equals(attributeValue.getAttribute().isGenerated())
-          && attributeValue.getAttribute().getTextPattern() != null) {
-        reservedValueService.useReservedValue(
-            attributeValue.getAttribute().getTextPattern(), attributeValue.getValue());
-      }
     }
   }
 
@@ -151,10 +140,21 @@ public class DefaultTrackedEntityAttributeValueService
 
   @Override
   @Transactional(readOnly = true)
-  public List<TrackedEntityAttributeValue> getUniqueAttributeByValues(
-      Map<TrackedEntityAttribute, List<String>> uniqueAttributes) {
-    return uniqueAttributes.entrySet().stream()
-        .flatMap(entry -> this.attributeValueStore.get(entry.getKey(), entry.getValue()).stream())
-        .toList();
+  public List<UniqueAttributeValueMatch> getUniqueAttributeValues(
+      TrackedEntityAttribute attribute, Set<String> values) {
+    if (values.isEmpty()) {
+      return List.of();
+    }
+    return attributeValueStore.getUniqueAttributeValues(attribute, values);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<UniqueAttributeValueMatch> getUniqueAttributeValues(
+      TrackedEntityAttribute attribute, Map<Long, Set<String>> valuesByOrgUnitId) {
+    if (valuesByOrgUnitId.isEmpty()) {
+      return List.of();
+    }
+    return attributeValueStore.getUniqueAttributeValues(attribute, valuesByOrgUnitId);
   }
 }

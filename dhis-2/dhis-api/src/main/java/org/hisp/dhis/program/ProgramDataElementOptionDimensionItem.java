@@ -166,6 +166,7 @@ public class ProgramDataElementOptionDimensionItem extends BaseDimensionalItemOb
   }
 
   @Override
+  @JsonProperty
   public DimensionItemType getDimensionItemType() {
     return PROGRAM_DATA_ELEMENT_OPTION;
   }
@@ -193,7 +194,7 @@ public class ProgramDataElementOptionDimensionItem extends BaseDimensionalItemOb
   }
 
   @JsonProperty
-  @JsonSerialize(as = BaseIdentifiableObject.class)
+  @JsonSerialize(as = IdentifiableObject.class)
   @JacksonXmlProperty(namespace = DXF_2_0)
   @Property(value = REFERENCE, required = TRUE)
   public DataElement getDataElement() {

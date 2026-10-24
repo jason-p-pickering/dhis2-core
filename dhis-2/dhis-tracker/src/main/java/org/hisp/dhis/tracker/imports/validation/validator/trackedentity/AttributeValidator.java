@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,6 @@ import static org.hisp.dhis.tracker.imports.validation.validator.ValidationUtils
 import static org.hisp.dhis.tracker.imports.validation.validator.ValidationUtils.validateValueType;
 
 import java.util.Set;
-import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
 import org.hisp.dhis.trackedentity.TrackedEntityAttribute;
 import org.hisp.dhis.trackedentity.TrackedEntityType;
@@ -47,7 +46,6 @@ import org.hisp.dhis.tracker.imports.domain.MetadataIdentifier;
 import org.hisp.dhis.tracker.imports.preheat.TrackerPreheat;
 import org.hisp.dhis.tracker.imports.validation.Reporter;
 import org.hisp.dhis.tracker.imports.validation.Validator;
-import org.hisp.dhis.tracker.model.TrackedEntity;
 import org.springframework.stereotype.Component;
 
 /**
@@ -58,10 +56,6 @@ class AttributeValidator
     extends org.hisp.dhis.tracker.imports.validation.validator.AttributeValidator
     implements Validator<org.hisp.dhis.tracker.imports.domain.TrackedEntity> {
 
-  public AttributeValidator(DhisConfigurationProvider dhisConfigurationProvider) {
-    super(dhisConfigurationProvider);
-  }
-
   @Override
   public void validate(
       Reporter reporter,
@@ -70,12 +64,11 @@ class AttributeValidator
     TrackedEntityType trackedEntityType =
         bundle.getPreheat().getTrackedEntityType(trackedEntity.getTrackedEntityType());
 
-    TrackedEntity te = bundle.getPreheat().getTrackedEntity(trackedEntity.getTrackedEntity());
     OrganisationUnit organisationUnit =
         bundle.getPreheat().getOrganisationUnit(trackedEntity.getOrgUnit());
 
     validateMandatoryAttributes(reporter, bundle, trackedEntity, trackedEntityType);
-    validateAttributes(reporter, bundle, trackedEntity, te, organisationUnit, trackedEntityType);
+    validateAttributes(reporter, bundle, trackedEntity, organisationUnit, trackedEntityType);
   }
 
   private void validateMandatoryAttributes(
@@ -105,7 +98,6 @@ class AttributeValidator
       Reporter reporter,
       TrackerBundle bundle,
       org.hisp.dhis.tracker.imports.domain.TrackedEntity trackedEntity,
-      TrackedEntity te,
       OrganisationUnit orgUnit,
       TrackedEntityType trackedEntityType) {
     TrackerPreheat preheat = bundle.getPreheat();
@@ -131,12 +123,18 @@ class AttributeValidator
         continue;
       }
 
-      validateAttributeValue(reporter, trackedEntity, tea, attribute.getValue());
+      validateAttributeValue(reporter, trackedEntity, attribute.getValue());
       validateValueType(reporter, bundle, trackedEntity, attribute.getValue(), tea);
-      validateOptionSet(reporter, trackedEntity, tea, attribute.getValue());
+      validateOptionSet(reporter, preheat, trackedEntity, tea, attribute.getValue());
 
       validateAttributeUniqueness(
-          reporter, preheat, trackedEntity, attribute.getValue(), tea, te, orgUnit);
+          reporter,
+          preheat,
+          trackedEntity,
+          attribute.getValue(),
+          tea,
+          trackedEntity.getUID(),
+          orgUnit);
     }
   }
 }

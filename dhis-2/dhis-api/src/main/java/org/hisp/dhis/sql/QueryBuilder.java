@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,7 +87,8 @@ public final class QueryBuilder {
   private static final Pattern WHERE_AND =
       Pattern.compile("([\n\t ]+)WHERE[\n\t ]+(?:1=1)?[\n\t ]+AND[\n\t ]+");
 
-  private static final Pattern WITH_START = Pattern.compile("^\\s*[a-z_]{1,30}\\s+AS\\s*\\(\\s*$");
+  private static final Pattern WITH_START =
+      Pattern.compile("^\\s*[a-z_]{1,30}\\s+AS(?:\\s+MATERIALIZED)?\\s*\\(\\s*$");
   private static final Pattern WITH_END_COMMA = Pattern.compile("^\\s*\\)\\s*,\\s*$");
   private static final Pattern WITH_END_SELECT = Pattern.compile("^\\s*\\)\\s*$");
   private static final Pattern WITH_END_COMMA_SELECT =
@@ -136,7 +137,7 @@ public final class QueryBuilder {
     return setParameter(name, value, SQL.Param.Type.STRING_ARRAY);
   }
 
-  public QueryBuilder setParameter(String name, Long... value) {
+  public QueryBuilder setParameter(String name, long... value) {
     return setParameter(name, value, SQL.Param.Type.LONG_ARRAY);
   }
 
@@ -163,7 +164,9 @@ public final class QueryBuilder {
   private QueryBuilder setParameter(
       @Nonnull String name, @CheckForNull Object value, @Nonnull SQL.Param.Type type) {
     params.put(name, new SQL.Param(type, name, value));
-    if (value == null || value instanceof Object[] arr && arr.length == 0) nullParams.add(name);
+    if (value == null
+        || value instanceof Object[] arr && arr.length == 0
+        || value instanceof long[] arr && arr.length == 0) nullParams.add(name);
     return this;
   }
 
@@ -442,7 +445,11 @@ public final class QueryBuilder {
     if (eqParams.isEmpty()) return sql;
     for (String name : eqParams) {
       SQL.Param param = params.get(name);
-      if (param != null && param.value() instanceof Object[] arr && arr.length == 1) {
+      Object single = null;
+      if (param != null && param.value() instanceof Object[] arr && arr.length == 1)
+        single = arr[0];
+      if (param != null && param.value() instanceof long[] arr && arr.length == 1) single = arr[0];
+      if (single != null) {
         String newSql =
             sql.replaceAll(
                     "([\n\t ]+)IN[\n\t ]*\\([\n\t ]*:" + name + "[\n\t ]*\\)", "$1= :" + name + " ")
@@ -450,7 +457,7 @@ public final class QueryBuilder {
                     "([\n\t ]+)ANY[\n\t ]*\\([\n\t ]*:" + name + "[\n\t ]*\\)", "$1:" + name + " ");
         if (!newSql.equals(sql)) {
           sql = newSql;
-          params.put(name, new SQL.Param(param.type().elementType(), name, arr[0]));
+          params.put(name, new SQL.Param(param.type().elementType(), name, single));
         }
       }
     }

@@ -101,15 +101,17 @@ public class EnrollmentAggregateService {
     Grid grid = createGridWithHeaders();
     addCommonHeaders(grid, params, periods);
 
+    // Re-add period items, needed for data and for metadata generation (items + dimensions
+    // sections, e.g. "enrollmentdate"), regardless of skipData.
+    if (!periods.isEmpty()) {
+      params =
+          new EventQueryParams.Builder(params)
+              .withPeriods(periods.stream().flatMap(p -> p.getItems().stream()).toList(), EMPTY)
+              .build();
+    }
+
     // Add data.
     if (!params.isSkipData() || params.analyzeOnly()) {
-      if (!periods.isEmpty()) {
-        params =
-            new EventQueryParams.Builder(params)
-                .withPeriods(periods.stream().flatMap(p -> p.getItems().stream()).toList(), EMPTY)
-                .build();
-      }
-
       addData(grid, params);
     }
 
@@ -156,6 +158,16 @@ public class EnrollmentAggregateService {
       enrollmentAnalyticsManager.getEnrollments(queryParams, grid, maxLimit);
 
       timer.getTime("Got enrollments " + grid.getHeight());
+    }
+
+    // Sort grid, done again due to potential multiple partitions.
+    if (params.hasSortOrder() && grid.getHeight() > 0 && grid.getIndexOfHeader("value") != -1) {
+      grid.sortGrid(grid.getIndexOfHeader("value") + 1, params.getSortOrderAsInt());
+    }
+
+    // Limit grid.
+    if (params.hasLimit() && grid.getHeight() > params.getLimit()) {
+      grid.limitGrid(params.getLimit());
     }
   }
 
