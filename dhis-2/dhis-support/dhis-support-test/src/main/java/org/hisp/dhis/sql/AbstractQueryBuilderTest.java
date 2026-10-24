@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import javax.annotation.Nonnull;
@@ -52,10 +53,18 @@ public abstract class AbstractQueryBuilderTest {
 
   private final AtomicReference<String> sql = new AtomicReference<>();
   private final Map<String, SQL.Param> params = new TreeMap<>();
+  private final AtomicInteger fetchSize = new AtomicInteger(-1);
 
   @Nonnull
   protected final SQL.QueryAPI createSpyQuery() {
-    return SQL.spy(this.sql::set, params::put);
+    return SQL.spy(this.sql::set, params::put, fetchSize::set);
+  }
+
+  /**
+   * @return the fetch size bound in the last captured query, or -1 when none was set
+   */
+  protected final int capturedFetchSize() {
+    return fetchSize.get();
   }
 
   /**
