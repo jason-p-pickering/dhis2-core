@@ -543,6 +543,12 @@ public enum ConfigurationKey {
   LOGGING_QUERY_SLOW_THRESHOLD(
       "logging.query.slow_threshold", String.valueOf(SECONDS.toMillis(1)), false),
 
+  /**
+   * Adds the authenticated user's UID as the {@code X-User-ID} response header, so a reverse proxy
+   * can record it in its access log. (default: off).
+   */
+  LOGGING_USER_ID_HEADER_ENABLED("logging.user_id_header.enabled", Constants.OFF, false),
+
   /** Base URL to the DHIS 2 instance. */
   SERVER_BASE_URL("server.base.url", "", false),
 
