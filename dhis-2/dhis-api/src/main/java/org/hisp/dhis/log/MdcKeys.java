@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,9 @@ public final class MdcKeys {
 
   /** Hashed session ID or job UID. Set by SessionIdFilter and the job scheduler. */
   public static final String MDC_SESSION_ID = "sessionId";
+
+  /** UID of the authenticated user. Set by UserIdFilter. */
+  public static final String MDC_USER_ID = "userId";
 
   /**
    * Deprecated alias of {@link #MDC_REQUEST_ID}. Kept for backward compatibility with custom log4j2
