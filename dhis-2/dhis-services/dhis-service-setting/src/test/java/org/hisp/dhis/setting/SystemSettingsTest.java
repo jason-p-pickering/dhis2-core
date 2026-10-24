@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2024, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,7 +102,8 @@ class SystemSettingsTest {
   @Test
   void testKeysWithDefaults() {
     Set<String> keys = SystemSettings.keysWithDefaults();
-    assertEquals(150, keys.size());
+    assertEquals(151, keys.size());
+    assertTrue(keys.contains("keyAnalyticsMaxIndicatorPermutations"));
     // just check some at random
     assertTrue(keys.contains("syncSkipSyncForDataChangedBefore"));
     assertTrue(keys.contains("keyTrackerDashboardLayout"));
