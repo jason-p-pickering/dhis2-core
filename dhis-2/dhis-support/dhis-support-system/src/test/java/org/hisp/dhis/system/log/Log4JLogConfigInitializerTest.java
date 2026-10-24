@@ -36,10 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.Map;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.impl.ContextDataFactory;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.apache.logging.log4j.message.SimpleMessage;
-import org.apache.logging.log4j.util.SortedArrayStringMap;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -82,7 +82,7 @@ class Log4JLogConfigInitializerTest {
   }
 
   private static String format(Map<String, String> mdc) {
-    SortedArrayStringMap contextData = new SortedArrayStringMap();
+    var contextData = ContextDataFactory.createContextData();
     mdc.forEach(contextData::putValue);
     LogEvent event =
         Log4jLogEvent.newBuilder()
