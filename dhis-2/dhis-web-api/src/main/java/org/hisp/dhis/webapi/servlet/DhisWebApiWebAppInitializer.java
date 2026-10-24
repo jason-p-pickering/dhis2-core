@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -163,6 +163,10 @@ public class DhisWebApiWebAppInitializer implements WebApplicationInitializer {
 
     context
         .addFilter("sessionIdFilter", new DelegatingFilterProxy("sessionIdFilter"))
+        .addMappingForUrlPatterns(null, true, "/*");
+
+    context
+        .addFilter("userIdFilter", new DelegatingFilterProxy("userIdFilter"))
         .addMappingForUrlPatterns(null, true, "/*");
 
     /* Intercept index.html, plugin.html, and other html requests to inject no-cache
