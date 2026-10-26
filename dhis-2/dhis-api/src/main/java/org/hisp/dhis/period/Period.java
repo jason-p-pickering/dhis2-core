@@ -108,10 +108,11 @@ public class Period implements Serializable {
         throw new IllegalArgumentException("Invalid Period `%s`".formatted(isoPeriod));
       }
       PeriodType type = PeriodType.getPeriodType(input.type());
+      org.hisp.dhis.calendar.Calendar cal = PeriodType.getCalendar();
       return new Period(
           type,
-          interval.getFrom().toJdkDate(),
-          interval.getTo().toJdkDate(),
+          cal.toIso(interval.getFrom()).toJdkDate(),
+          cal.toIso(interval.getTo()).toJdkDate(),
           type.getIsoDate(interval.getFrom()));
     } catch (IllegalArgumentException ex) {
       throw ex;
