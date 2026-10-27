@@ -175,7 +175,7 @@ public class DataElement extends BaseMetadataObject
 
   /** Data element value type (int, boolean, etc) */
   @Enumerated(EnumType.STRING)
-  @Column(name = "valueType", length = 50, nullable = false)
+  @Column(name = "valuetype", length = 50, nullable = false)
   private ValueType valueType;
 
   /** Abstract class representing options for value types. */
@@ -187,7 +187,7 @@ public class DataElement extends BaseMetadataObject
    * DataElementDomainType.TRACKER.
    */
   @Enumerated(EnumType.STRING)
-  @Column(name = "domainType", nullable = false)
+  @Column(name = "domaintype", nullable = false)
   private DataElementDomain domainType;
 
   @Enumerated(EnumType.STRING)
@@ -518,6 +518,7 @@ public class DataElement extends BaseMetadataObject
   // TODO can also be dimension
 
   @Override
+  @JsonProperty
   public DimensionItemType getDimensionItemType() {
     return DimensionItemType.DATA_ELEMENT;
   }
@@ -622,8 +623,7 @@ public class DataElement extends BaseMetadataObject
   @JacksonXmlProperty(namespace = DxfNamespaces.DXF_2_0)
   @Translatable(propertyName = "formName", key = "FORM_NAME")
   public String getDisplayFormName() {
-    return translations.getTranslation(
-        "FORM_NAME", getFormName() != null ? getFormName() : getDisplayName());
+    return translations.getTranslation("FORM_NAME", getFormNameFallback());
   }
 
   @Override
