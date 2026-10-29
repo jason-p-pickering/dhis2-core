@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,9 +28,14 @@
 package org.hisp.dhis.dataanalysis;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
+import java.util.List;
+import org.hisp.dhis.common.UID;
 
 public class ValidationRulesAnalysisParams {
   private String vrg;
+
+  private List<UID> vr = new ArrayList<>();
 
   private String ou;
 
@@ -68,6 +73,16 @@ public class ValidationRulesAnalysisParams {
 
   public void setVrg(String vrg) {
     this.vrg = vrg;
+  }
+
+  /** Individual validation rules to evaluate; mutually exclusive with {@link #getVrg()}. */
+  @JsonProperty
+  public List<UID> getVr() {
+    return vr;
+  }
+
+  public void setVr(List<UID> vr) {
+    this.vr = vr == null ? new ArrayList<>() : vr;
   }
 
   @JsonProperty
@@ -130,6 +145,8 @@ public class ValidationRulesAnalysisParams {
         + "validationRuleGroupId='"
         + vrg
         + '\''
+        + ", validationRuleIds="
+        + vr
         + ", organisationUnitId='"
         + ou
         + '\''
