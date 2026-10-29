@@ -50,7 +50,6 @@ import org.hisp.dhis.category.CategoryService;
 import org.hisp.dhis.common.DhisApiVersion;
 import org.hisp.dhis.common.Grid;
 import org.hisp.dhis.common.GridHeader;
-import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.common.OpenApi;
 import org.hisp.dhis.common.UID;
 import org.hisp.dhis.common.cache.CacheStrategy;
@@ -142,8 +141,6 @@ public class DataAnalysisController {
 
   @Autowired private ValidationRuleService validationRuleService;
 
-  @Autowired private IdentifiableObjectManager manager;
-
   @Autowired private OrganisationUnitService organisationUnitService;
 
   @Autowired private PeriodService periodService;
@@ -175,6 +172,9 @@ public class DataAnalysisController {
     String groupId = validationRulesAnalysisParams.getVrg();
     if (!ruleIds.isEmpty() && groupId != null) {
       throw new BadRequestException("Only one of vr and vrg can be specified");
+    }
+    if (ruleIds.contains(null)) {
+      throw new BadRequestException("vr must not contain null entries");
     }
     if (ruleIds.size() > MAX_VALIDATION_RULES) {
       throw new BadRequestException(
@@ -607,7 +607,7 @@ public class DataAnalysisController {
       return List.of();
     }
     List<String> uids = UID.toValueList(Set.copyOf(ruleIds));
-    List<ValidationRule> rules = manager.getByUid(ValidationRule.class, uids);
+    List<ValidationRule> rules = validationRuleService.getValidationRulesByUid(uids);
     if (rules.size() < uids.size()) {
       Set<String> found =
           rules.stream().map(ValidationRule::getUid).collect(Collectors.toUnmodifiableSet());
