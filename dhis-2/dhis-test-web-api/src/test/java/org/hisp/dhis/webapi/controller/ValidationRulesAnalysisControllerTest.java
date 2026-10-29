@@ -38,7 +38,6 @@ import org.hisp.dhis.jsontree.JsonObject;
 import org.hisp.dhis.organisationunit.OrganisationUnit;
 import org.hisp.dhis.user.User;
 import org.hisp.dhis.web.HttpStatus;
-import org.hisp.dhis.web.WebClient.HttpResponse;
 import org.hisp.dhis.webapi.DhisControllerIntegrationTest;
 import org.hisp.dhis.webapi.json.domain.JsonError;
 import org.junit.jupiter.api.BeforeEach;
@@ -162,7 +161,7 @@ class ValidationRulesAnalysisControllerTest extends DhisControllerIntegrationTes
   void testAnalysis_TooManyRules() {
     String uids =
         IntStream.rangeClosed(1, 51)
-            .mapToObj(i -> "'VrAnalys%03d'".formatted(i))
+            .mapToObj("'VrAnalys%03d'"::formatted)
             .collect(Collectors.joining(","));
     JsonError error = postAnalysis("'vr':[" + uids + "]").error(HttpStatus.BAD_REQUEST);
     assertEquals("At most 50 validation rules can be specified in vr", error.getMessage());
