@@ -48,6 +48,7 @@ import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.hibernate.FlushMode;
 import org.hibernate.Session;
 import org.hisp.dhis.category.CategoryOptionCombo;
 import org.hisp.dhis.category.CategoryService;
@@ -141,11 +142,12 @@ public class DefaultValidationService implements ValidationService {
                     + (parameters.isPersistResults() ? ", persisting results" : "")
                     + (parameters.isSendNotifications() ? ", sending notifications" : ""));
 
-    ValidationRunContext context = getValidationContext(parameters);
+    ValidationRunContext context = withoutAutoFlush(() -> getValidationContext(parameters));
 
     clock.logTime("Initialized validation analysis");
 
-    List<ValidationResult> results = Validator.validate(context, runner, progress);
+    List<ValidationResult> results =
+        withoutAutoFlush(() -> Validator.validate(context, runner, progress));
 
     if (context.isPersistResults()) {
       progress.startingStage("Persisting Results", SKIP_STAGE);
@@ -168,13 +170,14 @@ public class DefaultValidationService implements ValidationService {
   @Override
   public ValidationRuleExpressionDetails getValidationRuleExpressionDetails(
       ValidationAnalysisParams parameters) {
-    ValidationRunContext context = getValidationContext(parameters);
-
     ValidationRuleExpressionDetails details = new ValidationRuleExpressionDetails();
 
-    context.setValidationRuleExpressionDetails(details);
-
-    Validator.validate(context, runner, JobProgress.noop());
+    withoutAutoFlush(
+        () -> {
+          ValidationRunContext context = getValidationContext(parameters);
+          context.setValidationRuleExpressionDetails(details);
+          return Validator.validate(context, runner, JobProgress.noop());
+        });
 
     details.sortByName();
 
@@ -318,6 +321,23 @@ public class DefaultValidationService implements ValidationService {
           () -> organisationUnitService.getOrganisationUnitWithChildren(ou.getUid()));
     }
     return Lists.newArrayList(ou);
+  }
+
+  /**
+   * Runs read-only work of a validation run with the session in manual flush mode. Nothing is
+   * written before results are persisted, but each query would otherwise auto-flush the session,
+   * and a flush walks every managed entity and its collections, read-only or not. With the whole
+   * hierarchy loaded that is hundreds of thousands of organisation units per query.
+   */
+  private <T> T withoutAutoFlush(Supplier<T> work) {
+    Session session = entityManager.unwrap(Session.class);
+    FlushMode flushMode = session.getHibernateFlushMode();
+    session.setHibernateFlushMode(FlushMode.MANUAL);
+    try {
+      return work.get();
+    } finally {
+      session.setHibernateFlushMode(flushMode);
+    }
   }
 
   /**
