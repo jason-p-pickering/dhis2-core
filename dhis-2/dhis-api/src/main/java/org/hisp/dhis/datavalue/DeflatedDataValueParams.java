@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,6 +102,13 @@ public class DeflatedDataValueParams {
   private Set<CategoryOptionGroup> cogDimensionConstraints;
 
   private boolean includeDeleted;
+
+  /**
+   * Fetch only the keys and the value of each data value, leaving storedBy, created, lastUpdated,
+   * comment, followup and deleted unset. For callers that only evaluate values, such as validation
+   * rule analysis, which can fetch millions of rows.
+   */
+  private boolean valuesOnly;
 
   private Date lastUpdated;
 
@@ -244,6 +251,7 @@ public class DeflatedDataValueParams {
         .add("category option dimension constraints", coDimensionConstraints)
         .add("category option group dimension constraints", cogDimensionConstraints)
         .add("deleted", includeDeleted)
+        .add("values only", valuesOnly)
         .add("last updated", lastUpdated)
         .add("last updated duration", lastUpdatedDuration)
         .add("limit", limit)
