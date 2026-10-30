@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -249,7 +249,8 @@ public class HibernateDataValueStore extends HibernateGenericStore<DataValue>
     jdbcTemplate.query(
         sql.toString(),
         resultSet -> {
-          DeflatedDataValue ddv = getDdvFromResultSet(resultSet, params.needsOrgUnitDetails());
+          DeflatedDataValue ddv =
+              getDdvFromResultSet(resultSet, params.isValuesOnly(), params.needsOrgUnitDetails());
           if (params.hasBlockingQueue()) {
             getDdvAddToBlockingQueue(params.getBlockingQueue(), ddv);
           } else {
@@ -271,8 +272,11 @@ public class HibernateDataValueStore extends HibernateGenericStore<DataValue>
     sql.append(
             """
             select dv.dataelementid, dv.periodid, dv.sourceid, \
-            dv.categoryoptioncomboid, dv.attributeoptioncomboid, dv.value, \
-            dv.storedby, dv.created, dv.lastupdated, dv.comment, dv.followup, dv.deleted""")
+            dv.categoryoptioncomboid, dv.attributeoptioncomboid, dv.value""")
+        .append(
+            params.isValuesOnly()
+                ? ""
+                : ", dv.storedby, dv.created, dv.lastupdated, dv.comment, dv.followup, dv.deleted")
         .append(params.needsOrgUnitDetails() ? ", ou.path" : "")
         .append(" from datavalue dv");
   }
@@ -563,21 +567,21 @@ public class HibernateDataValueStore extends HibernateGenericStore<DataValue>
   }
 
   /** getDeflatedDataValues - Creates a {@link DeflatedDataValue} from a query result row. */
-  private DeflatedDataValue getDdvFromResultSet(ResultSet resultSet, boolean joinOrgUnit)
-      throws SQLException {
+  private DeflatedDataValue getDdvFromResultSet(
+      ResultSet resultSet, boolean valuesOnly, boolean joinOrgUnit) throws SQLException {
     Long dataElementId = resultSet.getLong(1);
     Long periodId = resultSet.getLong(2);
     Long organisationUnitId = resultSet.getLong(3);
     Long categoryOptionComboId = resultSet.getLong(4);
     Long attributeOptionComboId = resultSet.getLong(5);
     String value = resultSet.getString(6);
-    String storedBy = resultSet.getString(7);
-    Date created = resultSet.getDate(8);
-    Date lastUpdated = resultSet.getDate(9);
-    String comment = resultSet.getString(10);
-    boolean followup = resultSet.getBoolean(11);
-    boolean deleted = resultSet.getBoolean(12);
-    String sourcePath = joinOrgUnit ? resultSet.getString(13) : null;
+    String storedBy = valuesOnly ? null : resultSet.getString(7);
+    Date created = valuesOnly ? null : resultSet.getDate(8);
+    Date lastUpdated = valuesOnly ? null : resultSet.getDate(9);
+    String comment = valuesOnly ? null : resultSet.getString(10);
+    boolean followup = !valuesOnly && resultSet.getBoolean(11);
+    boolean deleted = !valuesOnly && resultSet.getBoolean(12);
+    String sourcePath = joinOrgUnit ? resultSet.getString(valuesOnly ? 7 : 13) : null;
 
     DeflatedDataValue ddv =
         new DeflatedDataValue(

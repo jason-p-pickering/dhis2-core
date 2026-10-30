@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -470,6 +470,7 @@ public class DataValidationRunner {
       params.setPeriodTypes(periodTypeX.getAllowedPeriodTypes());
       params.setCoDimensionConstraints(context.getCoDimensionConstraints());
       params.setCogDimensionConstraints(context.getCogDimensionConstraints());
+      params.setValuesOnly(true);
 
       if (context.getAttributeCombo() != null) {
         params.setAttributeOptionCombos(List.of(context.getAttributeCombo()));

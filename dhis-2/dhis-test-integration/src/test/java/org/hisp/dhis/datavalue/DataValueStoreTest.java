@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2024, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,12 +31,16 @@ package org.hisp.dhis.datavalue;
 
 import static org.hisp.dhis.test.utils.Assertions.assertContainsAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.google.common.collect.Sets;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.util.List;
+import java.util.Set;
 import org.hisp.dhis.category.CategoryOption;
 import org.hisp.dhis.category.CategoryOptionCombo;
 import org.hisp.dhis.common.IdentifiableObjectUtils;
@@ -302,6 +306,49 @@ class DataValueStoreTest extends PostgresIntegrationTestBase {
     checkDataValuesPresent(
         postMergeState,
         List.of("dv test 1", "dv test 2 - last updated", "dv test 3", "dv test 4, untouched"));
+  }
+
+  @Test
+  @DisplayName("Fetching values only leaves the audit columns unset but keeps keys, value and path")
+  void getDeflatedDataValuesValuesOnly() {
+    Period period = createPeriod(DateUtils.getDate(2024, 3, 1), DateUtils.getDate(2024, 3, 31));
+    DataValue dv = persistDataValue('v', period, "42");
+    OrganisationUnit child = createOrganisationUnit("vo child", dv.getSource());
+    manager.persist(child);
+    dv.setSource(child);
+    dv.setComment("a comment");
+    dv.setFollowup(true);
+    addDataValues(dv);
+
+    DeflatedDataValueParams params =
+        new DeflatedDataValueParams()
+            .setDataElements(Set.of(dv.getDataElement()))
+            .setPeriods(Set.of(period))
+            .setOrganisationUnits(Set.of(child.getParent()))
+            .setIncludeDescendants(true);
+
+    DeflatedDataValue full = dataValueStore.getDeflatedDataValues(params).get(0);
+    assertEquals("a comment", full.getComment());
+    assertNotNull(full.getStoredBy());
+    assertNotNull(full.getLastUpdated());
+
+    List<DeflatedDataValue> valuesOnly =
+        dataValueStore.getDeflatedDataValues(params.setValuesOnly(true));
+
+    assertEquals(1, valuesOnly.size());
+    DeflatedDataValue ddv = valuesOnly.get(0);
+    assertEquals(dv.getDataElement().getId(), ddv.getDataElementId());
+    assertEquals(period.getId(), ddv.getPeriodId());
+    assertEquals(child.getId(), ddv.getSourceId());
+    assertEquals(dv.getCategoryOptionCombo().getId(), ddv.getCategoryOptionComboId());
+    assertEquals(dv.getAttributeOptionCombo().getId(), ddv.getAttributeOptionComboId());
+    assertEquals("42", ddv.getValue());
+    assertEquals(child.getStoredPath(), ddv.getSourcePath());
+    assertNull(ddv.getStoredBy());
+    assertNull(ddv.getComment());
+    assertNull(ddv.getCreated());
+    assertNull(ddv.getLastUpdated());
+    assertFalse(ddv.isFollowup());
   }
 
   private void checkDataValuesPresent(List<DataExportValue> dataValues, List<String> values) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,7 @@ import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_STAGE;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -43,9 +44,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.hibernate.Session;
 import org.hisp.dhis.category.CategoryOptionCombo;
 import org.hisp.dhis.category.CategoryService;
 import org.hisp.dhis.common.DimensionItemType;
@@ -108,6 +111,8 @@ public class DefaultValidationService implements ValidationService {
   private final DataValidationRunner runner;
 
   private final UserService userService;
+
+  private final EntityManager entityManager;
 
   // -------------------------------------------------------------------------
   // ValidationRule business logic
@@ -306,12 +311,30 @@ public class DefaultValidationService implements ValidationService {
   private List<OrganisationUnit> getOrganisationUnits(ValidationAnalysisParams parameters) {
     OrganisationUnit ou = parameters.getOrgUnit();
     if (ou == null) {
-      return organisationUnitService.getAllOrganisationUnits();
+      return loadReadOnly(organisationUnitService::getAllOrganisationUnits);
     }
     if (parameters.isIncludeOrgUnitDescendants()) {
-      return organisationUnitService.getOrganisationUnitWithChildren(ou.getUid());
+      return loadReadOnly(
+          () -> organisationUnitService.getOrganisationUnitWithChildren(ou.getUid()));
     }
     return Lists.newArrayList(ou);
+  }
+
+  /**
+   * Loads the organisation units of a validation run as read-only entities. A run can load the
+   * whole hierarchy (hundreds of thousands of units) into a read-write session; managed entities
+   * are snapshotted on load and dirty-checked on every subsequent auto-flush, which made the
+   * single-threaded setup of the run dominated by flushing units that are never modified.
+   */
+  private List<OrganisationUnit> loadReadOnly(Supplier<List<OrganisationUnit>> loader) {
+    Session session = entityManager.unwrap(Session.class);
+    boolean defaultReadOnly = session.isDefaultReadOnly();
+    session.setDefaultReadOnly(true);
+    try {
+      return loader.get();
+    } finally {
+      session.setDefaultReadOnly(defaultReadOnly);
+    }
   }
 
   /**
