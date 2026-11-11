@@ -40,6 +40,7 @@ import org.hisp.dhis.query.Filter;
 import org.hisp.dhis.query.Junction;
 import org.hisp.dhis.query.Order;
 import org.hisp.dhis.query.Query;
+import org.hisp.dhis.query.operators.LikeOperator;
 import org.hisp.dhis.schema.Property;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
@@ -155,25 +156,24 @@ public class DefaultQueryPlanner implements QueryPlanner {
     return new QueryPlan<>(dbQuery, memoryQuery);
   }
 
-  /*
-   * Checks if the filter path corresponds to an "id" property of a collection path. This is done by
-   * verifying that the terminal property is named "id", that the path has at least one traversal, and
-   * that at least one traversal in the path is a collection. This ensures that we only translate
-   * filters that target identifiers of collection relationships, which can be safely translated to
-   * EXISTS predicates without risking unintended consequences on non-collection relationships or
-   * simple properties.
+  /**
+   * Checks if the filter targets a simple property reached through a collection path, for example
+   * {@code userGroups.id} or {@code dataViewOrganisationUnits.path}. Such filters can be translated
+   * to a correlated EXISTS predicate, which matches the in-memory "any element matches" semantics.
+   * A like filter additionally requires a text property.
    *
    * @param rootType the root type of the query
-   * @param filterPath the filter path to evaluate
+   * @param filter the filter to evaluate
    * @param terminalProperty the terminal property of the filter path
-   * @return {@code true} if the filter path corresponds to an "id" property of a collection
-   * path {@code false} otherwise
+   * @return {@code true} if the filter targets a simple property of a collection path, {@code
+   *     false} otherwise
    */
-  private boolean isCollectionIdPath(
-      Class<?> rootType, String filterPath, Property terminalProperty) {
-    if (terminalProperty == null || !"id".equals(terminalProperty.getName())) return false;
+  private boolean isCollectionPath(Class<?> rootType, Filter filter, Property terminalProperty) {
+    if (terminalProperty == null || !terminalProperty.isSimple()) return false;
+    if (filter.getOperator() instanceof LikeOperator<?>
+        && terminalProperty.getKlass() != String.class) return false;
 
-    String[] components = filterPath.split("\\.");
+    String[] components = filter.getPath().split("\\.");
     if (components.length < 2) return false;
 
     return hasCollectionTraversal(rootType, components);
@@ -230,7 +230,7 @@ public class DefaultQueryPlanner implements QueryPlanner {
     if (Attribute.ObjectType.isValidType(path.getPath())) return false;
 
     if (path.haveAlias()) {
-      if (isCollectionIdDbFilter(query, filter, path)) {
+      if (isCollectionDbFilter(query, filter, path)) {
         return true;
       }
       if (pathRequiresInMemoryFiltering(query.getObjectType(), path.getAlias())) {
@@ -241,7 +241,7 @@ public class DefaultQueryPlanner implements QueryPlanner {
     return true;
   }
 
-  private boolean isCollectionIdDbFilter(Query<?> query, Filter filter, PropertyPath path) {
+  private boolean isCollectionDbFilter(Query<?> query, Filter filter, PropertyPath path) {
     if (!query.allowsDbPredicate()) {
       return false;
     }
@@ -250,7 +250,7 @@ public class DefaultQueryPlanner implements QueryPlanner {
       return false;
     }
 
-    return isCollectionIdPath(query.getObjectType(), filter.getPath(), path.getProperty());
+    return isCollectionPath(query.getObjectType(), filter, path.getProperty());
   }
 
   /**
@@ -265,8 +265,8 @@ public class DefaultQueryPlanner implements QueryPlanner {
    * </ul>
    *
    * <p>This planner step is conservative: collection and embedded-object traversals are treated as
-   * in-memory here, except for collection-id filters explicitly marked as DB-eligible by {@code
-   * isCollectionIdDbFilter(...)}.
+   * in-memory here, except for collection filters explicitly marked as DB-eligible by {@code
+   * isCollectionDbFilter(...)}.
    */
   private boolean pathRequiresInMemoryFiltering(Class<?> klass, String[] aliases) {
     Schema schema = schemaService.getSchema(klass);

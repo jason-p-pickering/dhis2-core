@@ -37,11 +37,9 @@ import static org.hisp.dhis.user.CurrentUserUtil.getCurrentUserDetails;
 
 import jakarta.persistence.EntityManager;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -63,6 +61,8 @@ import org.hisp.dhis.sql.SQL;
 import org.hisp.dhis.user.CurrentUserUtil;
 import org.hisp.dhis.user.UserDetails;
 import org.intellij.lang.annotations.Language;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Slf4j
@@ -74,6 +74,7 @@ public class HibernateDataExportStore implements DataExportStore {
   private static final int EXPORT_FETCH_SIZE = 1000;
 
   private final EntityManager entityManager;
+  private final JdbcTemplate jdbcTemplate;
 
   @Override
   @CheckForNull
@@ -122,7 +123,11 @@ public class HibernateDataExportStore implements DataExportStore {
   @Override
   @UsageTestOnly
   public List<DataExportValue> getAllDataValues() {
-    return exportValues(DataExportParams.builder().includeDeleted(false).build()).toList();
+    // closing the stream releases the connection when this is called outside a transaction
+    try (Stream<DataExportValue> values =
+        exportValues(DataExportParams.builder().includeDeleted(false).build())) {
+      return values.toList();
+    }
   }
 
   @Nonnull
@@ -139,12 +144,11 @@ public class HibernateDataExportStore implements DataExportStore {
             ? null
             : getAllowedAocIds(api, currentUser, params.getAttributeOptionCombos());
     if (aocAllowed != null && aocAllowed.length == 0) return Stream.empty();
-    // the same few periods repeat across many rows, parse each ISO period once per export;
-    // the cache must not outlive the export since Period is mutable
-    Map<String, Period> periods = new HashMap<>();
-    Function<String, Period> periodOf = iso -> periods.computeIfAbsent(iso, Period::of);
-    return createExportQuery(params, api, currentUser, aocAllowed).stream()
-        .map(row -> DataExportValue.of(row, periodOf));
+    // the export itself goes through plain JDBC: no per-column Hibernate type handling per row,
+    // and the JdbcTemplate's fetch size lets the driver stream rows instead of buffering them all
+    SQL.QueryAPI exportApi = NativeSQL.of(new NamedParameterJdbcTemplate(jdbcTemplate));
+    return createExportQuery(params, exportApi, currentUser, aocAllowed).stream()
+        .map(DataExportValue::of);
   }
 
   /**
@@ -243,10 +247,8 @@ public class HibernateDataExportStore implements DataExportStore {
       lastUpdated = new Date(currentTimeMillis() - params.getLastUpdatedDuration().toMillis());
 
     boolean descendants = params.isIncludeDescendants();
-    // no default ordering here: an ORDER BY is only useful (and cheap) when the caller actually
-    // needs it (e.g. ADX grouping, which sets its own explicit order) - for a plain export there
-    // is no consumer of row order, and pe.startdate/dv.created/deid have no supporting index, so
-    // an unrequested default forces Postgres into a blocking sort over the whole result set
+    // no default order: a plain export has no consumer of row order, and sorting by columns
+    // without a supporting index forces a blocking sort over the whole result set
     List<Order> orders = params.getOrders();
 
     List<UID> oug = params.getOrganisationUnitGroups();

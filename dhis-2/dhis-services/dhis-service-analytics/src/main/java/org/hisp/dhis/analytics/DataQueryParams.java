@@ -81,7 +81,6 @@ import java.util.stream.Stream;
 import javax.annotation.Nullable;
 import org.apache.commons.collections4.MultiValuedMap;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.Strings;
 import org.hisp.dhis.analytics.table.model.Partitions;
 import org.hisp.dhis.analytics.util.AnalyticsUtils;
 import org.hisp.dhis.category.Category;
@@ -222,7 +221,11 @@ public class DataQueryParams {
           CategoryOptionGroupSet.class,
           Category.class);
 
-  private static final Set<String> DIMENSION_PERMUTATION_IGNORE_DIMS =
+  /**
+   * Dimensions that are not part of the dimension item permutations (see {@link
+   * #getDimensionItemPermutations()} and {@link #countDimensionItemPermutations()}).
+   */
+  public static final Set<String> DIMENSION_PERMUTATION_IGNORE_DIMS =
       Set.of(DATA_X_DIM_ID, CATEGORYOPTIONCOMBO_DIM_ID);
 
   public static final Set<DimensionType> COMPLETENESS_DIMENSION_TYPES =
@@ -1120,34 +1123,6 @@ public class DataQueryParams {
     return !dimensionOptions.isEmpty() ? dimensionOptions : getFilterOptions(key);
   }
 
-  /**
-   * unlike {@link DataQueryParams#getDimensionOrFilterItems(String)}, which returns the {@link
-   * DimensionalItemObject} found in the first matching dimensions or filters, this method returns
-   * all {@link DimensionalItemObject} for all matching dimensions or filters. Dimensions have
-   * precedence over filters.
-   *
-   * @param key
-   * @return all {@link DimensionalItemObject} for all matching dimensions or filters.
-   */
-  public List<DimensionalItemObject> getAllDimensionOrFilterItems(String key) {
-    List<DimensionalItemObject> dimensionOptions = getItems(dimensions, key);
-
-    if (dimensionOptions.isEmpty()) {
-      return getItems(filters, key);
-    }
-
-    return dimensionOptions;
-  }
-
-  private static List<DimensionalItemObject> getItems(
-      Collection<DimensionalObject> dimensionalObjects, String key) {
-    return dimensionalObjects.stream()
-        .filter(dimensionalObject -> Strings.CS.equals(dimensionalObject.getDimension(), key))
-        .map(DimensionalObject::getItems)
-        .flatMap(Collection::stream)
-        .toList();
-  }
-
   /** Returns all dimension items part of dimensions of the given dimension type. */
   public List<DimensionalItemObject> getDimensionalItemObjects(DimensionType dimensionType) {
     return getDimensionsAndFilters(dimensionType).stream()
@@ -1588,13 +1563,27 @@ public class DataQueryParams {
       DimensionType type,
       String dimensionName,
       List<DimensionalItemObject> options) {
+    return setDimensionOptions(dimension, type, dimensionName, null, options);
+  }
+
+  /**
+   * Sets the options for the given dimension, with the given display name. Replaces the dimension
+   * if present, otherwise appends it.
+   */
+  protected DataQueryParams setDimensionOptions(
+      String dimension,
+      DimensionType type,
+      String dimensionName,
+      String dimensionDisplayName,
+      List<DimensionalItemObject> options) {
     int index = dimensions.indexOf(new BaseDimensionalObject(dimension));
+    BaseDimensionalObject dimensionalObject =
+        new BaseDimensionalObject(dimension, type, dimensionName, dimensionDisplayName, options);
 
     if (index != -1) {
-      dimensions.set(
-          index, new BaseDimensionalObject(dimension, type, dimensionName, null, options));
+      dimensions.set(index, dimensionalObject);
     } else {
-      dimensions.add(new BaseDimensionalObject(dimension, type, dimensionName, null, options));
+      dimensions.add(dimensionalObject);
     }
 
     return this;

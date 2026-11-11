@@ -56,6 +56,7 @@ import org.hisp.dhis.common.DimensionConstants;
 import org.hisp.dhis.common.DimensionalItemObject;
 import org.hisp.dhis.common.DimensionalObject;
 import org.hisp.dhis.common.QueryItem;
+import org.hisp.dhis.eventvisualization.Value;
 import org.hisp.dhis.period.PeriodDimension;
 import org.hisp.dhis.program.ProgramIndicator;
 import org.springframework.stereotype.Service;
@@ -69,6 +70,8 @@ public class DefaultEventQueryPlanner implements EventQueryPlanner {
   private final QueryPlanner queryPlanner;
 
   private final PartitionManager partitionManager;
+
+  private final FirstOrLastStagePeriodPlanner firstOrLastStagePeriodPlanner;
 
   // -------------------------------------------------------------------------
   // EventQueryPlanner implementation
@@ -84,6 +87,7 @@ public class DefaultEventQueryPlanner implements EventQueryPlanner {
             .add(this::groupByOrgUnitLevel)
             .add(this::groupByPeriodType)
             .add(this::groupByPeriod)
+            .add(firstOrLastStagePeriodPlanner::plan)
             .build();
 
     for (Function<EventQueryParams, List<EventQueryParams>> grouper : groupers) {
@@ -248,7 +252,7 @@ public class DefaultEventQueryPlanner implements EventQueryPlanner {
             new EventQueryParams.Builder(params)
                 .removeItems()
                 .removeItemProgramIndicators()
-                .withValue(item.getItem())
+                .withValue(new Value(item.getItem()))
                 .withOption(item.getOption())
                 .withAggregationType(aggregationType);
 

@@ -36,8 +36,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementGroup;
+import org.hisp.dhis.query.Filter;
 import org.hisp.dhis.query.Filters;
 import org.hisp.dhis.query.Order;
 import org.hisp.dhis.query.Query;
@@ -420,11 +422,57 @@ class DefaultQueryPlannerTest {
     assertTrue(plan.memoryQuery().isEmpty(), "Memory query should be empty");
   }
 
-  /** Tests that non-id collection paths still fall back to in-memory filtering. */
+  /** Tests that non-id simple collection paths are planned for DB filtering. */
   @Test
-  void testCollectionNonIdPathFallsBackToInMemory() {
+  void testCollectionNonIdPathPlannedToDb() {
+    QueryPlan<DataElement> plan =
+        planCollectionFilter(Filters.eq("dataElementGroups.name", "Group A"), String.class);
+
+    assertEquals(1, plan.dbQuery().getFilters().size(), "Collection non-id path should be in DB");
+    assertTrue(plan.memoryQuery().isEmpty(), "Memory query should be empty");
+  }
+
+  /** Tests that like on a text property of a collection path is planned for DB filtering. */
+  @Test
+  void testCollectionPathLikePlannedToDb() {
+    QueryPlan<DataElement> plan =
+        planCollectionFilter(
+            Filters.like("dataElementGroups.name", "abc", MatchMode.ANYWHERE), String.class);
+
+    assertEquals(1, plan.dbQuery().getFilters().size(), "Collection like should be in DB");
+    assertTrue(plan.memoryQuery().isEmpty(), "Memory query should be empty");
+    assertFalse(plan.dbQuery().isSkipPaging(), "DB query should page");
+  }
+
+  /** Tests that like on a non-text collection property stays in memory. */
+  @Test
+  void testCollectionPathLikeOnNonTextPropertyFallsBackToInMemory() {
+    QueryPlan<DataElement> plan =
+        planCollectionFilter(
+            Filters.like("dataElementGroups.name", "abc", MatchMode.ANYWHERE), Integer.class);
+
+    assertEquals(0, plan.dbQuery().getFilters().size(), "Non-text like should not be in DB");
+    assertEquals(1, plan.memoryQuery().getFilters().size(), "Non-text like should be in memory");
+  }
+
+  /** Tests that negated collection filters stay in memory (EXISTS would invert them). */
+  @Test
+  void testCollectionPathNegatedOperatorsFallBackToInMemory() {
+    for (Filter filter :
+        List.of(
+            Filters.notIn("dataElementGroups.name", List.of("a")),
+            Filters.ne("dataElementGroups.name", "a"),
+            Filters.notLike("dataElementGroups.name", "a", MatchMode.ANYWHERE))) {
+      QueryPlan<DataElement> plan = planCollectionFilter(filter, String.class);
+
+      assertEquals(0, plan.dbQuery().getFilters().size(), filter + " should not be in DB");
+      assertEquals(1, plan.memoryQuery().getFilters().size(), filter + " should be in memory");
+    }
+  }
+
+  private QueryPlan<DataElement> planCollectionFilter(Filter filter, Class<?> terminalType) {
     Query<DataElement> query = Query.of(DataElement.class);
-    query.add(Filters.eq("dataElementGroups.name", "Group A"));
+    query.add(filter);
 
     Schema dataElementSchema = mockSchema();
     when(dataElementSchema.hasPersistedProperty("name")).thenReturn(true);
@@ -434,20 +482,16 @@ class DefaultQueryPlannerTest {
     when(dataElementSchema.getProperty("dataElementGroups")).thenReturn(collectionProperty);
 
     Property nameProperty = mockSimplePersistedProperty("name");
+    nameProperty.setKlass(terminalType);
 
     when(schemaService.getSchema(DataElement.class)).thenReturn(dataElementSchema);
 
     PropertyPath collectionNamePath =
         new PropertyPath(nameProperty, true, new String[] {"dataElementGroups"});
-    when(schemaService.getPropertyPath(DataElement.class, "dataElementGroups.name"))
+    when(schemaService.getPropertyPath(DataElement.class, filter.getPath()))
         .thenReturn(collectionNamePath);
 
-    QueryPlan<DataElement> plan = queryPlanner.planQuery(query);
-
-    assertEquals(
-        0, plan.dbQuery().getFilters().size(), "Collection non-id path should not be in DB");
-    assertEquals(
-        1, plan.memoryQuery().getFilters().size(), "Collection non-id path should be in memory");
+    return queryPlanner.planQuery(query);
   }
 
   /**

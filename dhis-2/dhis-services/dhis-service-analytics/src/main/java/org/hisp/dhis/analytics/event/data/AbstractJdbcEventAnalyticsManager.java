@@ -987,7 +987,12 @@ public abstract class AbstractJdbcEventAnalyticsManager {
       return StringUtils.EMPTY;
     }
 
-    String queryItemFilterClause = getQueryItemsAndFiltersWhereClause(params, new SqlHelper());
+    Set<QueryItem> exclude =
+        params.hasFirstOrLastStagePeriod()
+            ? Set.of(params.getFirstOrLastStagePeriod().dateItem())
+            : Set.of();
+    String queryItemFilterClause =
+        getQueryItemsAndFiltersWhereClause(params, exclude, new SqlHelper());
 
     if (StringUtils.isBlank(queryItemFilterClause)) {
       return StringUtils.EMPTY;
@@ -2427,7 +2432,7 @@ public abstract class AbstractJdbcEventAnalyticsManager {
    * @return true if the aggregation type is NONE on both the param value's aggregation type
    */
   private boolean hasNoAggregationType(EventQueryParams params) {
-    if (params.getValue() == null) {
+    if (params.getValue() == null || params.getValue().getDimensionalObject() == null) {
       return false;
     }
 
@@ -2438,7 +2443,7 @@ public abstract class AbstractJdbcEventAnalyticsManager {
     }
 
     // No override exists, so check the value's aggregation type
-    return params.getValue().getAggregationType() == AggregationType.NONE;
+    return params.getValue().getDimensionalObject().getAggregationType() == AggregationType.NONE;
   }
 
   /**
@@ -3737,7 +3742,7 @@ public abstract class AbstractJdbcEventAnalyticsManager {
    * @param params the {@link EventQueryParams} for resolving org unit filters
    * @return the aggregated CTE SQL
    */
-  private String buildAggregatedCteSql(
+  String buildAggregatedCteSql(
       String eventTableName, String colName, QueryItem item, EventQueryParams params) {
     String template =
         """
