@@ -33,6 +33,7 @@ import static org.apache.commons.lang3.StringUtils.EMPTY;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hisp.dhis.analytics.AnalyticsConstants.ANALYTICS_TBL_ALIAS;
 import static org.hisp.dhis.analytics.DataType.NUMERIC;
@@ -235,7 +236,7 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
     String expected =
         "ax.\"quarterly\" as quarterly,ax.\"ou\" as ou  from "
             + getTable(programA.getUid())
-            + " as ax where (((enrollmentdate >= '2017-01-01' and enrollmentdate < '2018-01-01'))) and (ax.\"uidlevel1\" in ('ouabcdefghA')) ";
+            + " as ax where (((enrollmentdate >= '2017-01-01' and enrollmentdate < '2018-01-01')) and ax.\"quarterly\" in ('2000Q1') ) and (ax.\"uidlevel1\" in ('ouabcdefghA')) ";
 
     assertSql(sql.getValue(), expected);
     assertTrue(grid.hasLastDataRow());
@@ -257,7 +258,7 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
     String expected =
         "ax.\"quarterly\" as quarterly,ax.\"ou\" as ou  from "
             + getTable(programA.getUid())
-            + " as ax where (((lastupdated >= '2017-01-01' and lastupdated < '2018-01-01'))) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 10001";
+            + " as ax where (((lastupdated >= '2017-01-01' and lastupdated < '2018-01-01')) and (( ax.\"lastupdated\" >= '2000-01-01' and ax.\"lastupdated\" < '2000-04-01') )) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 10001";
 
     assertSql(sql.getValue(), expected);
   }
@@ -537,6 +538,16 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
   }
 
   @Test
+  void verifyEnrollmentCountCountsRowsOfEnrollmentTable() {
+    subject.getEnrollmentCount(createRequestParams());
+
+    verify(jdbcTemplate).queryForObject(sql.capture(), eq(Long.class));
+
+    assertThat(sql.getValue(), startsWith("select count(1) "));
+    assertThat(sql.getValue(), containsString("from analytics_enrollment_"));
+  }
+
+  @Test
   void testBadGrammarExceptionNonMultipleQueries() {
     // Given
     mockEmptyRowSet();
@@ -767,7 +778,7 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
             + "\"  "
             + "from analytics_enrollment_"
             + programA.getUid()
-            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09'))) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
+            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09')) and ax.\"quarterly\" in ('2000Q1') ) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
 
     assertSql(sql.getValue(), expected);
   }
@@ -817,7 +828,7 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
             + "\"  "
             + "from analytics_enrollment_"
             + programA.getUid()
-            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09'))) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
+            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09')) and ax.\"quarterly\" in ('2000Q1') ) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
 
     assertSql(sql.getValue(), expected);
   }
@@ -892,7 +903,7 @@ class EnrollmentAnalyticsManagerTest extends EventAnalyticsTest {
             + "\"  "
             + "from analytics_enrollment_"
             + programA.getUid()
-            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09'))) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
+            + " as ax where (((enrollmentdate >= '2015-01-01' and enrollmentdate < '2017-04-09')) and ax.\"quarterly\" in ('2000Q1') ) and (ax.\"uidlevel1\" in ('ouabcdefghA')) limit 101";
 
     assertSql(sql.getValue(), expected);
   }

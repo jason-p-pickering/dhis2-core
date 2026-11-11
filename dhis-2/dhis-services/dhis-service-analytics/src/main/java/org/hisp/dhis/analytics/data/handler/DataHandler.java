@@ -341,6 +341,12 @@ public class DataHandler {
       DataQueryParams dataSourceParams,
       List<Indicator> indicators,
       Grid grid) {
+    // Defensive: callers only invoke this with at least one indicator, but never materialise the
+    // dimension cartesian (getDimensionItemPermutations below) when there is nothing to compute.
+    if (indicators.isEmpty()) {
+      return;
+    }
+
     long permutations = dataSourceParams.countDimensionItemPermutations();
 
     checkIndicatorPermutationLimit(
@@ -405,9 +411,14 @@ public class DataHandler {
     }
   }
 
-  /** Returns {@code a * b} for non-negative values, or {@link Long#MAX_VALUE} on overflow. */
-  private static long multiplySaturated(long a, int b) {
-    return b > 0 && a > Long.MAX_VALUE / b ? Long.MAX_VALUE : a * b;
+  /**
+   * Returns {@code permutations * indicatorCount}, i.e. the number of indicator values to compute,
+   * for non-negative values, or {@link Long#MAX_VALUE} on overflow.
+   */
+  private static long multiplySaturated(long permutations, int indicatorCount) {
+    return indicatorCount > 0 && permutations > Long.MAX_VALUE / indicatorCount
+        ? Long.MAX_VALUE
+        : permutations * indicatorCount;
   }
 
   /**
@@ -416,8 +427,7 @@ public class DataHandler {
    */
   static String describeDimensionItemCounts(DataQueryParams params) {
     return params.getDimensions().stream()
-        .filter(d -> !DATA_X_DIM_ID.equals(d.getDimension()))
-        .filter(d -> !CATEGORYOPTIONCOMBO_DIM_ID.equals(d.getDimension()))
+        .filter(d -> !DataQueryParams.DIMENSION_PERMUTATION_IGNORE_DIMS.contains(d.getDimension()))
         .map(d -> d.getDimension() + "=" + d.getItems().size())
         .collect(Collectors.joining(" "));
   }

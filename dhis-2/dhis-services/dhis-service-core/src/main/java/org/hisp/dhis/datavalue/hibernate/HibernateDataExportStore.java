@@ -37,11 +37,9 @@ import static org.hisp.dhis.user.CurrentUserUtil.getCurrentUserDetails;
 
 import jakarta.persistence.EntityManager;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -139,12 +137,8 @@ public class HibernateDataExportStore implements DataExportStore {
             ? null
             : getAllowedAocIds(api, currentUser, params.getAttributeOptionCombos());
     if (aocAllowed != null && aocAllowed.length == 0) return Stream.empty();
-    // the same few periods repeat across many rows, parse each ISO period once per export;
-    // the cache must not outlive the export since Period is mutable
-    Map<String, Period> periods = new HashMap<>();
-    Function<String, Period> periodOf = iso -> periods.computeIfAbsent(iso, Period::of);
     return createExportQuery(params, api, currentUser, aocAllowed).stream()
-        .map(row -> DataExportValue.of(row, periodOf));
+        .map(DataExportValue::of);
   }
 
   /**
@@ -243,10 +237,8 @@ public class HibernateDataExportStore implements DataExportStore {
       lastUpdated = new Date(currentTimeMillis() - params.getLastUpdatedDuration().toMillis());
 
     boolean descendants = params.isIncludeDescendants();
-    // no default ordering here: an ORDER BY is only useful (and cheap) when the caller actually
-    // needs it (e.g. ADX grouping, which sets its own explicit order) - for a plain export there
-    // is no consumer of row order, and pe.startdate/dv.created/deid have no supporting index, so
-    // an unrequested default forces Postgres into a blocking sort over the whole result set
+    // no default order: a plain export has no consumer of row order, and sorting by columns
+    // without a supporting index forces a blocking sort over the whole result set
     List<Order> orders = params.getOrders();
 
     List<UID> oug = params.getOrganisationUnitGroups();
