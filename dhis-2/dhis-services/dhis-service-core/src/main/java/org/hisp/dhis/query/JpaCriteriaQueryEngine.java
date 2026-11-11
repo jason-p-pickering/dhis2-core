@@ -81,6 +81,7 @@ public class JpaCriteriaQueryEngine implements QueryEngine {
   private static final String DISPLAY_PREFIX = "display";
 
   private final SchemaService schemaService;
+  private final CollectionPaths collectionPaths;
   private final List<IdentifiableObjectStore<?>> hibernateGenericStores;
   private final QueryCacheManager queryCacheManager;
   private final EntityManager entityManager;
@@ -415,9 +416,7 @@ public class JpaCriteriaQueryEngine implements QueryEngine {
       return false;
     }
 
-    return CollectionPaths.itemType(
-            schemaService, query.getObjectType(), filter, path.getProperty())
-        != null;
+    return collectionPaths.itemType(query.getObjectType(), filter, path.getProperty()) != null;
   }
 
   /**
@@ -456,8 +455,7 @@ public class JpaCriteriaQueryEngine implements QueryEngine {
       terminalField = terminalField.substring(terminalField.lastIndexOf('.') + 1);
       match = joined.get(terminalField).in(values);
     } else {
-      Class<?> itemType =
-          CollectionPaths.itemType(schemaService, query.getObjectType(), filter, terminal);
+      Class<?> itemType = collectionPaths.itemType(query.getObjectType(), filter, terminal);
       Root<?> item = subquery.from((Class) itemType);
       match =
           builder.and(
