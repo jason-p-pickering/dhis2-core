@@ -276,10 +276,14 @@ public class DefaultValidationService implements ValidationService {
             .withItemMap(baseExParams.getItemMap())
             .withMaxResults(parameters.getMaxResults());
 
-    if (currentUser != null) {
+    if (currentUser != null && parameters.isApplyUserDimensionConstraints()) {
       builder
           .withCoDimensionConstraints(categoryService.getCoDimensionConstraints(currentUser))
           .withCogDimensionConstraints(categoryService.getCogDimensionConstraints(currentUser));
+    }
+
+    if (!parameters.isIncludePersistedResults()) {
+      return builder.build();
     }
 
     List<ValidationResult> initialResults =

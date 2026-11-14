@@ -73,6 +73,10 @@ public final class ValidationAnalysisParams {
 
   private int dayInPeriod = -1;
 
+  private boolean includePersistedResults = true;
+
+  private boolean applyUserDimensionConstraints = true;
+
   /**
    * Gets the rules selected for analysis
    *
@@ -160,6 +164,26 @@ public final class ValidationAnalysisParams {
     return maxResults;
   }
 
+  /**
+   * Gets whether violations already persisted in the database are returned and used to suppress
+   * re-evaluation. Defaults to true.
+   *
+   * @return true if persisted results are included, false if the analysis starts from scratch.
+   */
+  public boolean isIncludePersistedResults() {
+    return includePersistedResults;
+  }
+
+  /**
+   * Gets whether the current user's category option and category option group dimension constraints
+   * are applied to the analysis. Defaults to true.
+   *
+   * @return true if the user's dimension constraints are applied, false if not.
+   */
+  public boolean isApplyUserDimensionConstraints() {
+    return applyUserDimensionConstraints;
+  }
+
   public static class Builder {
     private ValidationAnalysisParams params;
 
@@ -240,6 +264,30 @@ public final class ValidationAnalysisParams {
      */
     public Builder withMaxResults(int maxResults) {
       this.params.maxResults = maxResults;
+      return this;
+    }
+
+    /**
+     * If set to false, previously persisted results are neither returned nor used to skip
+     * evaluation.
+     *
+     * @param includePersistedResults true (default) to include persisted results, false if not.
+     * @return the updated builder object
+     */
+    public Builder withIncludePersistedResults(boolean includePersistedResults) {
+      this.params.includePersistedResults = includePersistedResults;
+      return this;
+    }
+
+    /**
+     * If set to false, the current user's category option and category option group dimension
+     * constraints are not applied.
+     *
+     * @param applyUserDimensionConstraints true (default) to apply them, false if not.
+     * @return the updated builder object
+     */
+    public Builder withApplyUserDimensionConstraints(boolean applyUserDimensionConstraints) {
+      this.params.applyUserDimensionConstraints = applyUserDimensionConstraints;
       return this;
     }
 

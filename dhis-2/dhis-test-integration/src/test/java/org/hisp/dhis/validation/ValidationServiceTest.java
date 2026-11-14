@@ -93,6 +93,7 @@ import org.hisp.dhis.scheduling.JobProgress;
 import org.hisp.dhis.setting.ThreadUserSettings;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
 import org.hisp.dhis.translation.Translation;
+import org.hisp.dhis.user.CurrentUserUtil;
 import org.hisp.dhis.user.User;
 import org.hisp.dhis.user.UserService;
 import org.junit.jupiter.api.BeforeEach;
@@ -1705,6 +1706,73 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
                 .build());
     assertEquals(leftSideExpected, details.getLeftSide());
     assertEquals(rightSideExpected, details.getRightSide());
+  }
+
+  private void persistViolationThenFixData() {
+    useDataValue(dataElementA, periodA, sourceA, "1");
+    useDataValue(dataElementB, periodA, sourceA, "2");
+    useDataValue(dataElementC, periodA, sourceA, "3");
+    useDataValue(dataElementD, periodA, sourceA, "4");
+    validationRuleService.saveValidationRule(ruleA);
+    ValidationAnalysisParams persisting =
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withPersistResults(true)
+            .build();
+    assertEquals(1, runValidationAnalysis(persisting).size());
+    // C - D now equals A + B, so rule A is no longer violated
+    useDataValue(dataElementC, periodA, sourceA, "7");
+  }
+
+  @Test
+  void testPersistedResultForFixedDataNotReturnedWhenExcluded() {
+    persistViolationThenFixData();
+    ValidationAnalysisParams params =
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withIncludePersistedResults(false)
+            .build();
+    assertResultsEmpty(runValidationAnalysis(params));
+  }
+
+  @Test
+  void testPersistedResultForFixedDataStillReturnedByDefault() {
+    persistViolationThenFixData();
+    ValidationAnalysisParams params =
+        validationService.newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA)).build();
+    assertEquals(1, runValidationAnalysis(params).size());
+  }
+
+  @Test
+  void testUserDimensionConstraintsIgnoredWhenDisabled() {
+    useDataValue(dataElementA, periodA, sourceA, "1");
+    useDataValue(dataElementB, periodA, sourceA, "2");
+    useDataValue(dataElementC, periodA, sourceA, "3");
+    useDataValue(dataElementD, periodA, sourceA, "4");
+    validationRuleService.saveValidationRule(ruleA);
+
+    // constrain the current user to a category whose options do not include the default option
+    CategoryOption optionZ = createCategoryOption('Z');
+    Category categoryZ = createCategory('Z', optionZ);
+    categoryService.addCategoryOption(optionZ);
+    categoryService.addCategory(categoryZ);
+    User currentUser = userService.getUserByUsername(CurrentUserUtil.getCurrentUsername());
+    currentUser.getCatDimensionConstraints().add(categoryZ);
+    userService.updateUser(currentUser);
+
+    ValidationAnalysisParams constrained =
+        validationService.newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA)).build();
+    assertResultsEmpty(runValidationAnalysis(constrained));
+
+    ValidationAnalysisParams unconstrained =
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withApplyUserDimensionConstraints(false)
+            .build();
+    Collection<ValidationResult> reference = new HashSet<>();
+    reference.add(
+        new ValidationResult(ruleA, periodA, sourceA, defaultCombo, 3.0, -1.0, dayInPeriodA));
+    assertResultsEquals(reference, runValidationAnalysis(unconstrained));
   }
 
   private List<ValidationResult> runValidationAnalysis(ValidationAnalysisParams params) {
