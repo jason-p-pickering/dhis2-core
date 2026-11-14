@@ -1744,6 +1744,38 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
   }
 
   @Test
+  void testChangedViolationIsReEvaluatedWhenPersistedResultsExcluded() {
+    useDataValue(dataElementA, periodA, sourceA, "1");
+    useDataValue(dataElementB, periodA, sourceA, "2");
+    useDataValue(dataElementC, periodA, sourceA, "3");
+    useDataValue(dataElementD, periodA, sourceA, "4");
+    validationRuleService.saveValidationRule(ruleA);
+    ValidationAnalysisParams persisting =
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withPersistResults(true)
+            .build();
+    assertEquals(1, runValidationAnalysis(persisting).size());
+    // still violated, but left side (A + B) is now 7 instead of 3
+    useDataValue(dataElementA, periodA, sourceA, "5");
+
+    ValidationAnalysisParams excluded =
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withIncludePersistedResults(false)
+            .build();
+    List<ValidationResult> fresh = runValidationAnalysis(excluded);
+    assertEquals(1, fresh.size());
+    assertEquals(7.0, fresh.get(0).getLeftsideValue());
+
+    ValidationAnalysisParams byDefault =
+        validationService.newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA)).build();
+    List<ValidationResult> stale = runValidationAnalysis(byDefault);
+    assertEquals(1, stale.size());
+    assertEquals(3.0, stale.get(0).getLeftsideValue());
+  }
+
+  @Test
   void testUserDimensionConstraintsIgnoredWhenDisabled() {
     useDataValue(dataElementA, periodA, sourceA, "1");
     useDataValue(dataElementB, periodA, sourceA, "2");
