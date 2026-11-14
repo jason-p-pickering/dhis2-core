@@ -73,6 +73,11 @@
       <type>jar</type>
     </dependency>
     <dependency>
+      <groupId>org.hisp.dhis</groupId>
+      <artifactId>dhis-service-validation-analytics</artifactId>
+      <type>jar</type>
+    </dependency>
+    <dependency>
       <groupId>org.apache.tomcat.embed</groupId>
       <artifactId>tomcat-embed-core</artifactId>
       <version>${tomcat.version}</version>
@@ -213,6 +218,16 @@
       </plugins>
     </pluginManagement>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <configuration>
+          <ignoredUnusedDeclaredDependencies combine.children="append">
+            <!-- packaged into the WAR so Spring component scan finds its beans -->
+            <ignoredUnusedDeclaredDependency>org.hisp.dhis:dhis-service-validation-analytics</ignoredUnusedDeclaredDependency>
+          </ignoredUnusedDeclaredDependencies>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>

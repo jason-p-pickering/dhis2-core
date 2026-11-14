@@ -103,6 +103,11 @@
     </dependency>
     <dependency>
       <groupId>org.hisp.dhis</groupId>
+      <artifactId>dhis-service-validation-analytics</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hisp.dhis</groupId>
       <artifactId>dhis-support-artemis</artifactId>
       <scope>compile</scope>
     </dependency>
@@ -413,6 +418,7 @@
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-service-schema</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-tracker</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-service-validation</ignoredNonTestScopedDependency>
+            <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-service-validation-analytics</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-support-commons</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-support-external</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.hisp.dhis:dhis-support-hibernate</ignoredNonTestScopedDependency>

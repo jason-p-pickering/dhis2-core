@@ -307,6 +307,11 @@
       </dependency>
       <dependency>
         <groupId>org.hisp.dhis</groupId>
+        <artifactId>dhis-service-validation-analytics</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.hisp.dhis</groupId>
         <artifactId>dhis-service-metadata-workflow</artifactId>
         <version>${project.version}</version>
       </dependency>
