@@ -32,6 +32,7 @@ package org.hisp.dhis.validation.analytics;
 import static org.hisp.dhis.expression.Operator.equal_to;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.AdditionalMatchers.and;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -204,6 +205,38 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     run("3 months", groupA);
 
     assertEquals(1, store.count(rule), "only the row older than the window may stay");
+  }
+
+  @Test
+  void skippedRulesMissingGroupsAndRowCountsAreReportedToProgress() {
+    ValidationRule ineligible =
+        createValidationRule(
+            'I',
+            equal_to,
+            new Expression("I{GxdhnY5wmHq}", "left"),
+            new Expression("#{" + deB.getUid() + "}", "right"),
+            monthly);
+    validationRuleService.saveValidationRule(ineligible);
+    groupA.getMembers().add(ineligible);
+    validationRuleService.updateValidationRuleGroup(groupA);
+    Period period = monthsAgo(0);
+    value(deA, period, "1");
+    value(deB, period, "2");
+    entityManager.flush();
+
+    ValidationRuleAnalyticsJobParameters params = new ValidationRuleAnalyticsJobParameters();
+    params.setLookback("12 months");
+    params.setValidationRuleGroups(List.of(groupA.getUid(), "abcdefghij1"));
+    JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
+
+    job.execute(new JobEntry(UID.generate(), JobType.VALIDATION_RULE_ANALYTICS, params), progress);
+
+    verify(progress)
+        .completedStage(
+            and(
+                and(contains("Skipped 1 rule"), contains(ineligible.getUid())),
+                and(contains("PROGRAM_INDICATOR"), contains("abcdefghij1"))));
+    verify(progress).completedProcess(contains(rule.getUid() + ": 1"));
   }
 
   @Test
