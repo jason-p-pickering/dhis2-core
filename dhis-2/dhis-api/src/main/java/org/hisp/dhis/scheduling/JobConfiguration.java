@@ -69,6 +69,7 @@ import org.hisp.dhis.scheduling.parameters.SqlViewUpdateParameters;
 import org.hisp.dhis.scheduling.parameters.TestJobParameters;
 import org.hisp.dhis.scheduling.parameters.TrackerDataSynchronizationJobParameters;
 import org.hisp.dhis.scheduling.parameters.TrackerTrigramIndexJobParameters;
+import org.hisp.dhis.scheduling.parameters.ValidationRuleAnalyticsJobParameters;
 import org.hisp.dhis.schema.PropertyType;
 import org.hisp.dhis.schema.annotation.Property;
 
@@ -283,6 +284,9 @@ public class JobConfiguration extends BaseIdentifiableObject implements Secondar
             name = "CONTINUOUS_ANALYTICS_TABLE"),
         @JsonSubTypes.Type(value = MonitoringJobParameters.class, name = "MONITORING"),
         @JsonSubTypes.Type(value = PredictorJobParameters.class, name = "PREDICTOR"),
+        @JsonSubTypes.Type(
+            value = ValidationRuleAnalyticsJobParameters.class,
+            name = "VALIDATION_RULE_ANALYTICS"),
         @JsonSubTypes.Type(
             value = HtmlPushAnalyticsJobParameters.class,
             name = "HTML_PUSH_ANALYTICS"),

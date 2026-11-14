@@ -44,6 +44,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import org.hisp.dhis.feedback.ErrorCode;
 import org.hisp.dhis.http.HttpStatus;
 import org.hisp.dhis.jsontree.JsonBuilder;
 import org.hisp.dhis.jsontree.JsonBuilder.JsonObjectBuilder;
@@ -54,6 +55,7 @@ import org.hisp.dhis.scheduling.JobType;
 import org.hisp.dhis.scheduling.SchedulingType;
 import org.hisp.dhis.test.webapi.H2ControllerIntegrationTestBase;
 import org.hisp.dhis.test.webapi.json.domain.JsonJobConfiguration;
+import org.hisp.dhis.test.webapi.json.domain.JsonWebMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -164,6 +166,31 @@ class JobConfigurationControllerTest extends H2ControllerIntegrationTestBase {
     assertTrue(parameters.getBoolean("sendNotifications").booleanValue());
     assertTrue(parameters.getBoolean("persistResults").booleanValue());
     assertTrue(parameters.getArray("validationRuleGroups").isEmpty());
+  }
+
+  @Test
+  void testVALIDATION_RULE_ANALYTICS() {
+    // language=JSON
+    String json =
+        """
+            {"name":"test","jobType":"VALIDATION_RULE_ANALYTICS","cronExpression":"0 0 3 ? * *",
+            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lookback":"6 years"}}""";
+    String jobId = assertStatus(HttpStatus.CREATED, POST("/jobConfigurations", json));
+    JsonObject parameters = assertJobConfigurationExists(jobId, "VALIDATION_RULE_ANALYTICS");
+    assertEquals("UiOSY1iIdub", parameters.getArray("validationRuleGroups").getString(0).string());
+    assertEquals("6 years", parameters.getString("lookback").string());
+  }
+
+  @Test
+  void testVALIDATION_RULE_ANALYTICS_InvalidLookback() {
+    // language=JSON
+    String json =
+        """
+            {"name":"test","jobType":"VALIDATION_RULE_ANALYTICS","cronExpression":"0 0 3 ? * *",
+            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lookback":"3 fortnights"}}""";
+    JsonWebMessage message =
+        POST("/jobConfigurations", json).content(HttpStatus.CONFLICT).as(JsonWebMessage.class);
+    assertNotNull(message.findErrorReport(ErrorCode.E4027));
   }
 
   @Test
