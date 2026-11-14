@@ -30,9 +30,7 @@
 package org.hisp.dhis.validation.analytics;
 
 import java.util.Collection;
-import java.util.Date;
 import org.hisp.dhis.period.Period;
-import org.hisp.dhis.period.PeriodType;
 import org.hisp.dhis.validation.ValidationResult;
 import org.hisp.dhis.validation.ValidationRule;
 
@@ -48,15 +46,6 @@ public interface ValidationRuleViolationStore {
    */
   void replace(
       Collection<ValidationRule> rules, Period period, Collection<ValidationResult> results);
-
-  /**
-   * Deletes the rows of the given rules that belong to periods of another period type than the
-   * given one and that end on or after the given date. A rule that changed its period type leaves
-   * such rows behind, since {@link #replace} only touches the periods of the current type. Rows of
-   * periods ending before the date are kept, like for any period outside the look-back window.
-   */
-  void deleteRowsOfOtherPeriodTypes(
-      Collection<ValidationRule> rules, PeriodType periodType, Date windowStart);
 
   /** Number of rows for a rule (tests and job logging). */
   long count(ValidationRule rule);
