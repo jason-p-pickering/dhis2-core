@@ -72,8 +72,7 @@ public class ValidationRuleAnalyticsJobParameters implements JobParameters {
     try {
       Lookback.parse(lookback);
     } catch (IllegalArgumentException ex) {
-      return Optional.of(
-          new ErrorReport(this.getClass(), ErrorCode.E4000, "lookback (" + ex.getMessage() + ")"));
+      return Optional.of(new ErrorReport(this.getClass(), ErrorCode.E4027, lookback, "lookback"));
     }
     return Optional.empty();
   }

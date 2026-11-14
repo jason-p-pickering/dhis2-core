@@ -78,6 +78,7 @@ class ValidationRuleAnalyticsJobParametersTest {
     p.setLookback("3 fortnights");
     Optional<ErrorReport> error = p.validate();
     assertTrue(error.isPresent());
-    assertTrue(error.get().getMessage().contains("lookback"));
+    assertEquals(ErrorCode.E4027, error.get().getErrorCode());
+    assertEquals(List.of("3 fortnights", "lookback"), error.get().getErrorProperties());
   }
 }
