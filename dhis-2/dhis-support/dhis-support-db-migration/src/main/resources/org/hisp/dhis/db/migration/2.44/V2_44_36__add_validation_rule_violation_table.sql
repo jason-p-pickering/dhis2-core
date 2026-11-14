@@ -11,3 +11,7 @@ create table if not exists validationruleviolation (
 );
 
 create index if not exists in_validationruleviolation_periodid on validationruleviolation (periodid);
+-- the cascading foreign keys need an index, otherwise deleting an org unit or category option combo
+-- scans the whole table
+create index if not exists in_validationruleviolation_organisationunitid on validationruleviolation (organisationunitid);
+create index if not exists in_validationruleviolation_attributeoptioncomboid on validationruleviolation (attributeoptioncomboid);
