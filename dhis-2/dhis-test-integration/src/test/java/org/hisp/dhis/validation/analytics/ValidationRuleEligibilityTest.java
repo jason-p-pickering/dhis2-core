@@ -30,18 +30,56 @@
 package org.hisp.dhis.validation.analytics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
+import org.hisp.dhis.category.CategoryService;
+import org.hisp.dhis.constant.Constant;
+import org.hisp.dhis.constant.ConstantService;
+import org.hisp.dhis.dataelement.DataElement;
+import org.hisp.dhis.dataelement.DataElementService;
 import org.hisp.dhis.expression.Expression;
+import org.hisp.dhis.organisationunit.OrganisationUnitGroup;
+import org.hisp.dhis.organisationunit.OrganisationUnitGroupService;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
 import org.hisp.dhis.validation.ValidationRule;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 
+@Transactional
 class ValidationRuleEligibilityTest extends PostgresIntegrationTestBase {
 
   @Autowired private ValidationRuleEligibility eligibility;
+  @Autowired private DataElementService dataElementService;
+  @Autowired private CategoryService categoryService;
+  @Autowired private ConstantService constantService;
+  @Autowired private OrganisationUnitGroupService organisationUnitGroupService;
+
+  private String deA;
+  private String deB;
+  private String coc;
+  private String constant;
+  private String oug;
+
+  @BeforeEach
+  void setUp() {
+    DataElement a = createDataElement('A');
+    DataElement b = createDataElement('B');
+    dataElementService.addDataElement(a);
+    dataElementService.addDataElement(b);
+    deA = a.getUid();
+    deB = b.getUid();
+    coc = categoryService.getDefaultCategoryOptionCombo().getUid();
+    Constant c = new Constant("One half", 0.5);
+    constantService.saveConstant(c);
+    constant = c.getUid();
+    OrganisationUnitGroup g = createOrganisationUnitGroup('A');
+    organisationUnitGroupService.addOrganisationUnitGroup(g);
+    oug = g.getUid();
+  }
 
   private static ValidationRule rule(String left, String right) {
     ValidationRule rule = new ValidationRule();
@@ -57,27 +95,27 @@ class ValidationRuleEligibilityTest extends PostgresIntegrationTestBase {
   private void assertIneligible(ValidationRule rule) {
     Optional<String> reason = eligibility.ineligibilityReason(rule);
     assertTrue(reason.isPresent());
-    assertTrue(!reason.get().isBlank());
+    assertFalse(reason.get().isBlank());
   }
 
   @Test
   void dataElementIsEligible() {
-    assertEligible("#{fbfJHSPpUQD}", "#{cYeuwXTCPkU}");
+    assertEligible("#{" + deA + "}", "#{" + deB + "}");
   }
 
   @Test
   void dataElementOperandIsEligible() {
-    assertEligible("#{fbfJHSPpUQD.pq2XI5kz2BY}", "#{cYeuwXTCPkU.PT59n8BQbqM}");
+    assertEligible("#{" + deA + "." + coc + "}", "#{" + deB + "." + coc + "}");
   }
 
   @Test
   void constantIsEligible() {
-    assertEligible("#{fbfJHSPpUQD} + C{Gfd3ppDfq8E}", "#{cYeuwXTCPkU}");
+    assertEligible("#{" + deA + "} + C{" + constant + "}", "#{" + deB + "}");
   }
 
   @Test
   void orgUnitGroupIsEligible() {
-    assertEligible("OUG{CXw2yu5fodb}", "#{cYeuwXTCPkU}");
+    assertEligible("OUG{" + oug + "}", "#{" + deB + "}");
   }
 
   @Test
@@ -107,5 +145,21 @@ class ValidationRuleEligibilityTest extends PostgresIntegrationTestBase {
     ValidationRule rule = rule("#{fbfJHSPpUQD}", "#{cYeuwXTCPkU}");
     rule.getRightSide().setSlidingWindow(true);
     assertIneligible(rule);
+  }
+
+  @Test
+  void unknownItemIsIneligibleWithoutThrowing() {
+    ValidationRule rule = rule("#{fbfJHSPpUQD}", "#{" + deB + "}");
+    Optional<String> reason = eligibility.ineligibilityReason(rule);
+    assertTrue(reason.isPresent());
+    assertTrue(reason.get().contains("invalid expression"), reason.get());
+  }
+
+  @Test
+  void malformedExpressionIsIneligibleWithoutThrowing() {
+    ValidationRule rule = rule("#{" + deA + "} + )(", "#{" + deB + "}");
+    Optional<String> reason = eligibility.ineligibilityReason(rule);
+    assertTrue(reason.isPresent());
+    assertTrue(reason.get().contains("invalid expression"), reason.get());
   }
 }

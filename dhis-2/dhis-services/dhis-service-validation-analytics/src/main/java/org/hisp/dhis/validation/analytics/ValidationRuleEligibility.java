@@ -41,6 +41,7 @@ import org.hisp.dhis.expression.Expression;
 import org.hisp.dhis.expression.ExpressionInfo;
 import org.hisp.dhis.expression.ExpressionParams;
 import org.hisp.dhis.expression.ExpressionService;
+import org.hisp.dhis.expression.ExpressionValidationOutcome;
 import org.hisp.dhis.validation.ValidationRule;
 import org.springframework.stereotype.Component;
 
@@ -59,6 +60,10 @@ public class ValidationRuleEligibility {
   private final ExpressionService expressionService;
 
   /**
+   * Never throws for unparseable or invalid expressions: they make the rule ineligible. Program
+   * items are reported first, since they can be detected even when the expression is otherwise
+   * invalid.
+   *
    * @return empty if the rule is eligible, otherwise a short reason for the job log.
    */
   public Optional<String> ineligibilityReason(ValidationRule rule) {
@@ -84,6 +89,11 @@ public class ValidationRuleEligibility {
         return Optional.of(
             side + " uses an item of type " + id.getDimensionItemType() + " from analytics tables");
       }
+    }
+    // getExpressionInfo only logs parse errors and returns partial info, so validate explicitly.
+    if (expressionService.expressionIsValid(expression.getExpression(), VALIDATION_RULE_EXPRESSION)
+        != ExpressionValidationOutcome.VALID) {
+      return Optional.of(side + " has an invalid expression");
     }
     return Optional.empty();
   }
