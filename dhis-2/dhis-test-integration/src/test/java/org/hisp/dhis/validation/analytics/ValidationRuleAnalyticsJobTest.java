@@ -58,6 +58,7 @@ import org.hisp.dhis.period.MonthlyPeriodType;
 import org.hisp.dhis.period.Period;
 import org.hisp.dhis.period.PeriodService;
 import org.hisp.dhis.period.PeriodType;
+import org.hisp.dhis.period.QuarterlyPeriodType;
 import org.hisp.dhis.scheduling.JobEntry;
 import org.hisp.dhis.scheduling.JobProgress;
 import org.hisp.dhis.scheduling.JobType;
@@ -176,6 +177,33 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     value(deB, period, "1");
     run("12 months", groupA);
     assertEquals(0, store.count(rule));
+  }
+
+  @Test
+  void rowsUnderFormerPeriodTypeInWindowAreRemoved() {
+    PeriodType quarterly = new QuarterlyPeriodType();
+    Date now = new Date();
+    Period inWindow = quarterly.createPeriod(now);
+    Period tooOld =
+        quarterly.createPeriod(
+            Date.from(
+                LocalDate.now().minusYears(2).atStartOfDay(ZoneId.systemDefault()).toInstant()));
+    periodService.addPeriod(inWindow);
+    periodService.addPeriod(tooOld);
+    entityManager.flush();
+    var coc = categoryService.getDefaultCategoryOptionCombo();
+    store.replace(
+        List.of(rule),
+        inWindow,
+        List.of(new ValidationResult(rule, inWindow, unit, coc, 1.0, 2.0, 3)));
+    store.replace(
+        List.of(rule), tooOld, List.of(new ValidationResult(rule, tooOld, unit, coc, 1.0, 2.0, 3)));
+    assertEquals(2, store.count(rule));
+
+    // the rule is monthly, so the quarterly rows are stale
+    run("3 months", groupA);
+
+    assertEquals(1, store.count(rule), "only the row older than the window may stay");
   }
 
   @Test

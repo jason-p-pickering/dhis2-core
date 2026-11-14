@@ -32,9 +32,11 @@ package org.hisp.dhis.validation.analytics;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.hisp.dhis.period.Period;
+import org.hisp.dhis.period.PeriodType;
 import org.hisp.dhis.validation.ValidationResult;
 import org.hisp.dhis.validation.ValidationRule;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -84,6 +86,31 @@ public class JdbcValidationRuleViolationStore implements ValidationRuleViolation
           });
     }
     jdbcTemplate.batchUpdate(INSERT_SQL, inserts);
+  }
+
+  @Override
+  @Transactional
+  public void deleteRowsOfOtherPeriodTypes(
+      Collection<ValidationRule> rules, PeriodType periodType, Date windowStart) {
+    if (rules.isEmpty()) {
+      return;
+    }
+    Long[] ruleIds = rules.stream().map(ValidationRule::getId).toArray(Long[]::new);
+    jdbcTemplate.update(
+        """
+        delete from validationruleviolation v
+        using period p, periodtype pt
+        where v.periodid = p.periodid
+          and p.periodtypeid = pt.periodtypeid
+          and v.validationruleid = any(?)
+          and pt.name <> ?
+          and p.enddate >= ?
+        """,
+        ps -> {
+          ps.setArray(1, ps.getConnection().createArrayOf("bigint", ruleIds));
+          ps.setString(2, periodType.getName());
+          ps.setDate(3, new java.sql.Date(windowStart.getTime()));
+        });
   }
 
   @Override

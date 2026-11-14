@@ -99,7 +99,8 @@ public class ValidationRuleAnalyticsJob implements Job {
   }
 
   /** The eligible rules (by UID) of one period type, plus the periods to evaluate for them. */
-  private record Work(PeriodType periodType, List<String> ruleUids, List<Period> periods) {}
+  private record Work(
+      PeriodType periodType, List<String> ruleUids, Date windowStart, List<Period> periods) {}
 
   @Override
   public JobType getJobType() {
@@ -128,6 +129,7 @@ public class ValidationRuleAnalyticsJob implements Job {
         if (progress.isCancelled()) {
           break;
         }
+        removeRowsOfFormerPeriodTypes(w);
         progress.startingStage(
             "Evaluating " + w.periodType().getName() + " rules",
             w.periods().size(),
@@ -195,9 +197,29 @@ public class ValidationRuleAnalyticsJob implements Job {
           Date windowEnd = type.createPeriod(today).getEndDate();
           work.add(
               new Work(
-                  type, uids, periodService.getPeriodsBetweenDates(type, windowStart, windowEnd)));
+                  type,
+                  uids,
+                  windowStart,
+                  periodService.getPeriodsBetweenDates(type, windowStart, windowEnd)));
         });
     return work;
+  }
+
+  /**
+   * A rule that changed its period type leaves rows behind under its former type, which {@code
+   * replace} never touches, so those inside the window are deleted before evaluating.
+   */
+  private void removeRowsOfFormerPeriodTypes(Work work) {
+    Collection<ValidationRule> rules = new ArrayList<>();
+    readOnly.execute(
+        status -> {
+          work.ruleUids().stream()
+              .map(validationRuleService::getValidationRule)
+              .filter(Objects::nonNull)
+              .forEach(rules::add);
+          return null;
+        });
+    store.deleteRowsOfOtherPeriodTypes(rules, work.periodType(), work.windowStart());
   }
 
   private void evaluate(
