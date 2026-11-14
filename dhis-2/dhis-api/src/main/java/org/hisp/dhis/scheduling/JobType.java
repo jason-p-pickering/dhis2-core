@@ -64,6 +64,7 @@ import org.hisp.dhis.scheduling.parameters.SqlViewUpdateParameters;
 import org.hisp.dhis.scheduling.parameters.TestJobParameters;
 import org.hisp.dhis.scheduling.parameters.TrackerDataSynchronizationJobParameters;
 import org.hisp.dhis.scheduling.parameters.TrackerTrigramIndexJobParameters;
+import org.hisp.dhis.scheduling.parameters.ValidationRuleAnalyticsJobParameters;
 
 /**
  * Enum describing the different jobs in the system. Each job has a key, class, configurable status
@@ -89,6 +90,7 @@ public enum JobType {
   SEND_SCHEDULED_MESSAGE(),
   PROGRAM_NOTIFICATIONS(),
   MONITORING(MonitoringJobParameters.class),
+  VALIDATION_RULE_ANALYTICS(ValidationRuleAnalyticsJobParameters.class),
   HTML_PUSH_ANALYTICS(HtmlPushAnalyticsJobParameters.class),
   TRACKER_TRIGRAM_INDEX_MAINTENANCE(TrackerTrigramIndexJobParameters.class),
   PREDICTOR(PredictorJobParameters.class),
@@ -222,6 +224,7 @@ public enum JobType {
         || this == CONTINUOUS_ANALYTICS_TABLE
         || this == DATA_SET_NOTIFICATION
         || this == MONITORING
+        || this == VALIDATION_RULE_ANALYTICS
         || this == VALIDATION_RESULTS_NOTIFICATION
         || this == SYSTEM_VERSION_UPDATE_CHECK
         || this == DATA_SYNC
@@ -288,6 +291,7 @@ public enum JobType {
           Map.of(
               "relativePeriods", "/api/periodTypes/relativePeriodTypes",
               "validationRuleGroups", "/api/validationRuleGroups");
+      case VALIDATION_RULE_ANALYTICS -> Map.of("validationRuleGroups", "/api/validationRuleGroups");
       case PREDICTOR ->
           Map.of(
               "predictors", "/api/predictors",
