@@ -34,12 +34,10 @@ import static org.hisp.dhis.analytics.table.model.AnalyticsValueType.FACT;
 import static org.hisp.dhis.commons.util.TextUtils.emptyIfTrue;
 import static org.hisp.dhis.commons.util.TextUtils.format;
 import static org.hisp.dhis.db.model.DataType.CHARACTER_11;
-import static org.hisp.dhis.db.model.DataType.DATE;
 import static org.hisp.dhis.db.model.DataType.INTEGER;
 import static org.hisp.dhis.db.model.DataType.TIMESTAMP;
 import static org.hisp.dhis.db.model.constraint.Nullable.NOT_NULL;
 import static org.hisp.dhis.db.model.constraint.Nullable.NULL;
-import static org.hisp.dhis.util.DateUtils.toLongDate;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -157,7 +155,7 @@ public class JdbcValidationResultTableManager extends AbstractJdbcTableManager {
 
   @Override
   public boolean validState() {
-    return tableIsNotEmpty("validationresult");
+    return tableIsNotEmpty("validationruleviolation");
   }
 
   @Override
@@ -188,20 +186,15 @@ public class JdbcValidationResultTableManager extends AbstractJdbcTableManager {
         replaceQualify(
             sqlBuilder,
             """
-            from ${validationresult} vrs \
+            from ${validationruleviolation} vrs \
             inner join analytics_rs_periodstructure ps on vrs.periodid=ps.periodid \
             inner join ${validationrule} vr on vr.validationruleid=vrs.validationruleid \
             inner join analytics_rs_organisationunitgroupsetstructure ougs on vrs.organisationunitid=ougs.organisationunitid \
             left join analytics_rs_orgunitstructure ous on vrs.organisationunitid=ous.organisationunitid \
             inner join analytics_rs_categorystructure acs on vrs.attributeoptioncomboid=acs.categoryoptioncomboid \
-            where vrs.created < '${startTime}' \
-            and vrs.created is not null ${partitionClause} \
-            and (ougs.startdate is null or ps.monthstartdate=ougs.startdate)""",
-            Map.of(
-                "startTime",
-                toLongDate(params.getStartTime()),
-                "partitionClause",
-                partitionClause));
+            where (ougs.startdate is null or ps.monthstartdate=ougs.startdate) \
+            ${partitionClause}""",
+            Map.of("partitionClause", partitionClause));
 
     invokeTimeAndLog(sql, "Populating table: '{}'", tableName);
   }
@@ -218,12 +211,10 @@ public class JdbcValidationResultTableManager extends AbstractJdbcTableManager {
             sqlBuilder,
             """
             select distinct(extract(year from ps.startdate)) \
-            from ${validationresult} vrs \
+            from ${validationruleviolation} vrs \
             inner join analytics_rs_periodstructure ps on vrs.periodid=ps.periodid \
-            where ps.startdate is not null \
-            and vrs.created < '${startTime}'${fromDateClause}""",
-            Map.of(
-                "startTime", toLongDate(params.getStartTime()), "fromDateClause", fromDateClause));
+            where ps.startdate is not null${fromDateClause}""",
+            Map.of("fromDateClause", fromDateClause));
 
     return jdbcTemplate.queryForList(sql, Integer.class);
   }
@@ -249,10 +240,10 @@ public class JdbcValidationResultTableManager extends AbstractJdbcTableManager {
     columns.add(
         AnalyticsTableColumn.builder()
             .name("value")
-            .dataType(DATE)
+            .dataType(INTEGER)
             .nullable(NULL)
             .valueType(FACT)
-            .selectExpression("vrs.created as value")
+            .selectExpression("1")
             .build());
 
     return filterDimensionColumns(columns);

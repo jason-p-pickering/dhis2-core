@@ -35,9 +35,11 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hisp.dhis.period.PeriodType.PERIOD_TYPES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -75,6 +77,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.rowset.SqlRowSet;
 
 @ExtendWith(MockitoExtension.class)
 class JdbcValidationResultTableManagerTest {
@@ -154,6 +157,20 @@ class JdbcValidationResultTableManagerTest {
   }
 
   @Test
+  @DisplayName("validState checks the validationruleviolation table")
+  void testValidStateQueriesViolationTable() {
+    SqlRowSet rowSet = mock(SqlRowSet.class);
+    when(rowSet.next()).thenReturn(true);
+    when(jdbcTemplate.queryForRowSet(anyString())).thenReturn(rowSet);
+
+    assertTrue(subject.validState());
+
+    ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).queryForRowSet(sqlCaptor.capture());
+    assertThat(sqlCaptor.getValue(), containsString("validationruleviolation"));
+  }
+
+  @Test
   @DisplayName("Builds partition check clause using provided year (e.g. year = 2022)")
   void testGetPartitionChecks() {
     assertEquals(List.of("year = 2022"), subject.getPartitionChecks(2022, new Date()));
@@ -211,7 +228,7 @@ class JdbcValidationResultTableManagerTest {
 
   @Test
   @DisplayName(
-      "Regular update includes expected fixed/dynamic columns and value column uses vrs.created")
+      "Regular update includes expected fixed/dynamic columns and value column is constant 1")
   void testGetAnalyticsTablesRegularIncludesExpectedColumns() {
     // One data year so we build one table with columns from getColumns()
     when(jdbcTemplate.queryForList(anyString(), eq(Integer.class))).thenReturn(List.of(2022));
@@ -234,10 +251,11 @@ class JdbcValidationResultTableManagerTest {
         org.hamcrest.Matchers.hasItems(
             "dx", "pestartdate", "peenddate", "year", "monthly", "value"));
 
-    // Verify the 'value' column comes from vrs.created
+    // Verify the 'value' column is the constant 1 (one row per current violation)
     org.hisp.dhis.analytics.table.model.AnalyticsTableColumn valueCol =
         cols.stream().filter(c -> c.getName().equals("value")).findFirst().orElseThrow();
-    assertEquals("vrs.created as value", valueCol.getSelectExpression());
+    assertEquals("1", valueCol.getSelectExpression());
+    assertEquals(org.hisp.dhis.db.model.DataType.INTEGER, valueCol.getDataType());
   }
 
   @Test
@@ -265,10 +283,11 @@ class JdbcValidationResultTableManagerTest {
     String sql = sqlCaptor.getValue();
 
     // Select includes the fact column
-    assertThat(sql, containsString("vrs.created as value"));
-    // Time filter and non-null guard
-    assertThat(sql, containsString("vrs.created <"));
-    assertThat(sql, containsString("vrs.created is not null"));
+    assertThat(sql, containsString("1 from"));
+    // Reads the current violations; rows are replaced, so no time filter or non-null guard
+    assertThat(sql, containsString("validationruleviolation"));
+    assertFalse(sql.contains("validationresult\""));
+    assertFalse(sql.contains("vrs.created"));
     // Join clauses and OU groupset alignment
     assertThat(sql, containsString("analytics_rs_periodstructure ps"));
     assertThat(sql, containsString("analytics_rs_organisationunitgroupsetstructure ougs"));

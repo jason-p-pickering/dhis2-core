@@ -100,6 +100,7 @@ import org.hisp.dhis.validation.ValidationResult;
 import org.hisp.dhis.validation.ValidationResultService;
 import org.hisp.dhis.validation.ValidationRule;
 import org.hisp.dhis.validation.ValidationRuleService;
+import org.hisp.dhis.validation.analytics.ValidationRuleViolationStore;
 import org.hisp.dhis.visualization.Visualization;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -223,6 +224,8 @@ class AnalyticsServiceTest extends PostgresIntegrationTestBase {
   @Autowired private ValidationRuleService validationRuleService;
 
   @Autowired private ValidationResultService validationResultService;
+
+  @Autowired private ValidationRuleViolationStore violationStore;
 
   @Autowired private CompleteDataSetRegistrationService completeDataSetRegistrationService;
 
@@ -509,17 +512,21 @@ class AnalyticsServiceTest extends PostgresIntegrationTestBase {
     ValidationResult resultBBA =
         new ValidationResult(validationRuleB, peFeb.getPeriod(), ouB, optionComboA, 1.0, 2.0, 3);
 
-    Date today = new Date();
-    resultAA.setCreated(today);
-    resultAB.setCreated(today);
-    resultBA.setCreated(today);
-    resultBB.setCreated(today);
-    resultBAB.setCreated(today);
-    resultBBB.setCreated(today);
-    resultBBA.setCreated(today);
+    // Violations are written to the table the analytics table is built from. setUp runs outside a
+    // test transaction and every service call commits, so the JDBC store sees all fixtures.
+    violationStore.replace(
+        List.of(validationRuleA),
+        peJan.getPeriod(),
+        List.of(resultAA, resultAB, resultBA, resultBB));
+    violationStore.replace(List.of(validationRuleB), peJan.getPeriod(), List.of(resultBAB));
+    violationStore.replace(
+        List.of(validationRuleB), peFeb.getPeriod(), List.of(resultBBB, resultBBA));
 
-    validationResultService.saveValidationResults(
-        List.of(resultAA, resultAB, resultBA, resultBB, resultBAB, resultBBB, resultBBA));
+    // A result saved only to the legacy validationresult table must not be counted
+    ValidationResult legacyOnly =
+        new ValidationResult(validationRuleB, peJan.getPeriod(), ouB, optionComboA, 1.0, 2.0, 3);
+    legacyOnly.setCreated(new Date());
+    validationResultService.saveValidationResults(List.of(legacyOnly));
   }
 
   /**
