@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.hisp.dhis.period.Period;
 import org.hisp.dhis.period.PeriodService;
@@ -121,16 +123,44 @@ public class ValidationRuleAnalyticsJob implements Job {
       }
 
       Map<String, Integer> written = new LinkedHashMap<>();
+      AtomicInteger failedPeriods = new AtomicInteger();
       for (Work w : work) {
+        if (progress.isCancelled()) {
+          break;
+        }
         progress.startingStage(
-            "Evaluating " + w.periodType().getName() + " rules", w.periods().size());
+            "Evaluating " + w.periodType().getName() + " rules",
+            w.periods().size(),
+            JobProgress.FailurePolicy.SKIP_ITEM);
+        // a failing period is skipped (its old rows are kept) and the other periods continue
         progress.runStage(
             w.periods().stream()
-                .<Runnable>map(period -> () -> evaluate(w, period, written))
+                .<Runnable>map(
+                    period ->
+                        () -> {
+                          try {
+                            evaluate(w, period, written, progress);
+                          } catch (RuntimeException ex) {
+                            failedPeriods.incrementAndGet();
+                            log.warn(
+                                "Validation rule analytics failed for period {}, keeping its"
+                                    + " existing violations: {}",
+                                period.getIsoDate(),
+                                ex.getMessage());
+                            throw ex;
+                          }
+                        })
                 .toList());
       }
       written.forEach((uid, rows) -> log.info("Validation rule {}: {} violation rows", uid, rows));
-      progress.completedProcess("Validation rule analytics done");
+      if (failedPeriods.get() > 0) {
+        progress.failedProcess(
+            "Validation rule analytics finished with {} failed period(s), their existing"
+                + " violations were kept",
+            failedPeriods.get());
+      } else {
+        progress.completedProcess("Validation rule analytics done");
+      }
     } catch (RuntimeException ex) {
       progress.failedProcess(ex);
       throw ex;
@@ -170,7 +200,9 @@ public class ValidationRuleAnalyticsJob implements Job {
     return work;
   }
 
-  private void evaluate(Work work, Period period, Map<String, Integer> written) {
+  private void evaluate(
+      Work work, Period period, Map<String, Integer> written, JobProgress progress) {
+    FailureTrackingProgress tracking = new FailureTrackingProgress(progress);
     Collection<ValidationRule> rules = new ArrayList<>();
     List<ValidationResult> results =
         readOnly.execute(
@@ -189,10 +221,19 @@ public class ValidationRuleAnalyticsJob implements Job {
                       .withPersistResults(false)
                       .withSendNotifications(false)
                       .build(),
-                  JobProgress.noop());
+                  tracking);
             });
     if (results == null) {
       return;
+    }
+    if (progress.isCancelled()) {
+      throw new CancellationException("cancelled while evaluating " + period.getIsoDate());
+    }
+    if (tracking.hasFailed()) {
+      // partial results must not replace the stored violations of the period
+      throw new IllegalStateException(
+          "evaluation failed for period %s: %s"
+              .formatted(period.getIsoDate(), tracking.firstFailure()));
     }
     store.replace(rules, period, results);
     for (ValidationResult r : results) {

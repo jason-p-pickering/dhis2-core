@@ -32,6 +32,12 @@ package org.hisp.dhis.validation.analytics;
 import static org.hisp.dhis.expression.Operator.equal_to;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -62,9 +68,12 @@ import org.hisp.dhis.validation.ValidationResult;
 import org.hisp.dhis.validation.ValidationRule;
 import org.hisp.dhis.validation.ValidationRuleGroup;
 import org.hisp.dhis.validation.ValidationRuleService;
+import org.hisp.dhis.validation.ValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.AdditionalAnswers;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
@@ -79,6 +88,9 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
   @Autowired private PeriodService periodService;
   @Autowired private OrganisationUnitService organisationUnitService;
   @Autowired private CategoryService categoryService;
+  @Autowired private ValidationService validationService;
+  @Autowired private ValidationRuleEligibility eligibility;
+  @Autowired private PlatformTransactionManager transactionManager;
 
   private final PeriodType monthly = new MonthlyPeriodType();
   private DataElement deA;
@@ -233,5 +245,38 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     assertDoesNotThrow(() -> run("12 months", groupA));
 
     assertEquals(1, store.count(rule));
+  }
+
+  @Test
+  void failedEvaluationKeepsExistingViolationsAndFailsJob() {
+    Period period = monthsAgo(0);
+    value(deA, period, "1");
+    value(deB, period, "2");
+    run("12 months", groupA);
+    assertEquals(1, store.count(rule));
+
+    // the real analysis skips failing chunks and only reports them to the progress
+    ValidationService failing =
+        mock(ValidationService.class, AdditionalAnswers.delegatesTo(validationService));
+    doAnswer(
+            inv -> {
+              ((JobProgress) inv.getArgument(1)).failedWorkItem("chunk failed");
+              return List.<ValidationResult>of();
+            })
+        .when(failing)
+        .validationAnalysis(any(), any());
+    ValidationRuleAnalyticsJob failingJob =
+        new ValidationRuleAnalyticsJob(
+            failing, validationRuleService, periodService, eligibility, store, transactionManager);
+    ValidationRuleAnalyticsJobParameters params = new ValidationRuleAnalyticsJobParameters();
+    params.setLookback("12 months");
+    params.setValidationRuleGroups(List.of(groupA.getUid()));
+    JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
+
+    failingJob.execute(
+        new JobEntry(UID.generate(), JobType.VALIDATION_RULE_ANALYTICS, params), progress);
+
+    assertEquals(1, store.count(rule), "partial results must not replace the existing rows");
+    verify(progress).failedProcess(contains("failed period"), any());
   }
 }
