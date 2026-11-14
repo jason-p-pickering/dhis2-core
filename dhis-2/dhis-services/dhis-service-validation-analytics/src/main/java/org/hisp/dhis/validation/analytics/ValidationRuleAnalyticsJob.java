@@ -41,7 +41,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.hisp.dhis.period.Period;
 import org.hisp.dhis.period.PeriodService;
@@ -99,10 +98,6 @@ public class ValidationRuleAnalyticsJob implements Job {
     this.readOnly.setReadOnly(true);
   }
 
-  /** What the run will do, plus what it skipped and why (for the job progress shown to admins). */
-  private record Plan(
-      List<Work> work, Map<String, String> skippedRules, List<String> missingGroups) {}
-
   /** The eligible rules (by UID) of one period type, plus the periods to evaluate for them. */
   private record Work(
       PeriodType periodType, List<String> ruleUids, Date windowStart, List<Period> periods) {}
@@ -121,17 +116,10 @@ public class ValidationRuleAnalyticsJob implements Job {
       Date today = new Date();
       Date start = Lookback.parse(params.getLookback()).startDate(today);
 
-      Plan plan = readOnly.execute(status -> plan(params.getValidationRuleGroups(), start, today));
-      List<Work> work = plan == null ? List.of() : plan.work();
-      String selection = plan == null ? "" : describeSelection(plan);
-      if (!selection.isEmpty()) {
-        progress.startingStage("Selecting rules");
-        progress.completedStage(selection);
-      }
-      if (work.isEmpty()) {
-        progress.completedProcess(
-            "No eligible validation rules, nothing evaluated"
-                + (selection.isEmpty() ? "" : ". " + selection));
+      List<Work> work =
+          readOnly.execute(status -> plan(params.getValidationRuleGroups(), start, today));
+      if (work == null || work.isEmpty()) {
+        progress.completedProcess("No eligible validation rules, nothing evaluated");
         return;
       }
 
@@ -167,20 +155,13 @@ public class ValidationRuleAnalyticsJob implements Job {
                 .toList());
       }
       written.forEach((uid, rows) -> log.info("Validation rule {}: {} violation rows", uid, rows));
-      String rowCounts =
-          written.isEmpty()
-              ? "no violations found"
-              : "violation rows per rule: "
-                  + written.entrySet().stream()
-                      .map(e -> e.getKey() + ": " + e.getValue())
-                      .collect(Collectors.joining(", "));
       if (failedPeriods.get() > 0) {
         progress.failedProcess(
             "Validation rule analytics finished with {} failed period(s), their existing"
                 + " violations were kept",
             failedPeriods.get());
       } else {
-        progress.completedProcess("Validation rule analytics done, " + rowCounts);
+        progress.completedProcess("Validation rule analytics done");
       }
     } catch (RuntimeException ex) {
       progress.failedProcess(ex);
@@ -188,42 +169,19 @@ public class ValidationRuleAnalyticsJob implements Job {
     }
   }
 
-  private static String describeSelection(Plan plan) {
-    List<String> parts = new ArrayList<>();
-    if (!plan.skippedRules().isEmpty()) {
-      parts.add(
-          "Skipped %d rules: %s"
-              .formatted(
-                  plan.skippedRules().size(),
-                  plan.skippedRules().entrySet().stream()
-                      .map(e -> e.getKey() + " - " + e.getValue())
-                      .collect(Collectors.joining("; "))));
-    }
-    if (!plan.missingGroups().isEmpty()) {
-      parts.add("Missing groups: " + String.join(", ", plan.missingGroups()));
-    }
-    return String.join(". ", parts);
-  }
-
-  private Plan plan(List<String> groupUids, Date start, Date today) {
+  private List<Work> plan(List<String> groupUids, Date start, Date today) {
     Set<ValidationRule> rules = new LinkedHashSet<>();
-    List<String> missingGroups = new ArrayList<>();
     for (String uid : groupUids) {
       ValidationRuleGroup group = validationRuleService.getValidationRuleGroup(uid);
-      if (group == null) {
-        log.warn("Validation rule analytics: validation rule group {} not found", uid);
-        missingGroups.add(uid);
-      } else if (group.getMembers() != null) {
+      if (group != null && group.getMembers() != null) {
         rules.addAll(group.getMembers());
       }
     }
-    Map<String, String> skipped = new LinkedHashMap<>();
     Map<PeriodType, List<String>> eligibleByType = new LinkedHashMap<>();
     for (ValidationRule rule : rules) {
       Optional<String> reason = eligibility.ineligibilityReason(rule);
       if (reason.isPresent()) {
         log.info("Skipping validation rule {}: {}", rule.getUid(), reason.get());
-        skipped.put(rule.getUid(), reason.get());
       } else {
         eligibleByType
             .computeIfAbsent(rule.getPeriodType(), t -> new ArrayList<>())
@@ -244,7 +202,7 @@ public class ValidationRuleAnalyticsJob implements Job {
                   windowStart,
                   periodService.getPeriodsBetweenDates(type, windowStart, windowEnd)));
         });
-    return new Plan(work, skipped, missingGroups);
+    return work;
   }
 
   /**
