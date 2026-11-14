@@ -40,8 +40,10 @@ import org.hisp.dhis.constant.ConstantService;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementService;
 import org.hisp.dhis.expression.Expression;
+import org.hisp.dhis.organisationunit.OrganisationUnit;
 import org.hisp.dhis.organisationunit.OrganisationUnitGroup;
 import org.hisp.dhis.organisationunit.OrganisationUnitGroupService;
+import org.hisp.dhis.organisationunit.OrganisationUnitService;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
 import org.hisp.dhis.validation.ValidationRule;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +59,7 @@ class ValidationRuleEligibilityTest extends PostgresIntegrationTestBase {
   @Autowired private CategoryService categoryService;
   @Autowired private ConstantService constantService;
   @Autowired private OrganisationUnitGroupService organisationUnitGroupService;
+  @Autowired private OrganisationUnitService organisationUnitService;
 
   private String deA;
   private String deB;
@@ -116,6 +119,24 @@ class ValidationRuleEligibilityTest extends PostgresIntegrationTestBase {
   @Test
   void orgUnitGroupIsEligible() {
     assertEligible("OUG{" + oug + "}", "#{" + deB + "}");
+  }
+
+  @Test
+  void daysIsEligible() {
+    assertEligible("#{" + deA + "} * [days]", "#{" + deB + "}");
+  }
+
+  @Test
+  void orgUnitAncestorIsEligible() {
+    OrganisationUnit unit = createOrganisationUnit('A');
+    organisationUnitService.addOrganisationUnit(unit);
+    assertEligible(
+        "#{" + deA + "}", "if(orgUnit.ancestor(" + unit.getUid() + "), #{" + deB + "}, 0)");
+  }
+
+  @Test
+  void reportingRateIsIneligible() {
+    assertIneligible(rule("R{BfMAe6Itzgt.REPORTING_RATE}", "#{" + deB + "}"));
   }
 
   @Test
