@@ -91,6 +91,7 @@ import org.hisp.dhis.expression.dataitem.DimItemProgramAttribute;
 import org.hisp.dhis.expression.dataitem.DimItemProgramDataElement;
 import org.hisp.dhis.expression.dataitem.DimItemProgramIndicator;
 import org.hisp.dhis.expression.dataitem.DimItemReportingRate;
+import org.hisp.dhis.expression.dataitem.DimItemValidationRule;
 import org.hisp.dhis.expression.dataitem.ItemDays;
 import org.hisp.dhis.expression.dataitem.ItemOrgUnitGroupCount;
 import org.hisp.dhis.expression.dataitem.ItemPeriodInYear;
@@ -201,6 +202,7 @@ public class DefaultExpressionService implements ExpressionService {
           .put(STDDEV_POP, new VectorStddevPop())
           .put(STDDEV_SAMP, new VectorStddevSamp())
           .put(SUM, new VectorSum())
+          .put(VR_BRACE, new DimItemValidationRule())
           .build();
 
   private static final ImmutableMap<Integer, ExpressionItem> INDICATOR_EXPRESSION_ITEMS =
