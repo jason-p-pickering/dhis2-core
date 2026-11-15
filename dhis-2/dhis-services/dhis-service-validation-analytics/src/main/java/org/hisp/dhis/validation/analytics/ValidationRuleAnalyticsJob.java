@@ -29,6 +29,7 @@
  */
 package org.hisp.dhis.validation.analytics;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -113,7 +114,13 @@ public class ValidationRuleAnalyticsJob implements Job {
       ValidationRuleAnalyticsJobParameters params =
           (ValidationRuleAnalyticsJobParameters) config.parameters();
       Date today = new Date();
-      Date start = Lookback.parse(params.getLookback()).startDate(today);
+      Date start =
+          Date.from(
+              today
+                  .toInstant()
+                  .atZone(ZoneId.systemDefault())
+                  .minusMonths(params.getLastMonths())
+                  .toInstant());
 
       List<Work> work =
           readOnly.execute(status -> plan(params.getValidationRuleGroups(), start, today));

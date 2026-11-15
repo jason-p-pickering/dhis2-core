@@ -41,8 +41,8 @@ import org.junit.jupiter.api.Test;
 class ValidationRuleAnalyticsJobParametersTest {
 
   @Test
-  void testDefaultLookback() {
-    assertEquals("12 months", new ValidationRuleAnalyticsJobParameters().getLookback());
+  void testDefaultLastMonths() {
+    assertEquals(12, new ValidationRuleAnalyticsJobParameters().getLastMonths());
   }
 
   @Test
@@ -72,13 +72,13 @@ class ValidationRuleAnalyticsJobParametersTest {
   }
 
   @Test
-  void testInvalidLookback() {
+  void testLastMonthsMustBePositive() {
     ValidationRuleAnalyticsJobParameters p = new ValidationRuleAnalyticsJobParameters();
     p.setValidationRuleGroups(List.of("abcdefghij1"));
-    p.setLookback("3 fortnights");
+    p.setLastMonths(0);
     Optional<ErrorReport> error = p.validate();
     assertTrue(error.isPresent());
     assertEquals(ErrorCode.E4027, error.get().getErrorCode());
-    assertEquals(List.of("3 fortnights", "lookback"), error.get().getErrorProperties());
+    assertEquals(List.of("0", "lastMonths"), error.get().getErrorProperties());
   }
 }

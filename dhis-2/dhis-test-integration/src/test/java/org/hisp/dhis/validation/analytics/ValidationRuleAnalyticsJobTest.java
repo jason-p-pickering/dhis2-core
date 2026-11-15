@@ -153,10 +153,10 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     }
   }
 
-  private void run(String lookback, ValidationRuleGroup... groups) {
+  private void run(int lastMonths, ValidationRuleGroup... groups) {
     entityManager.flush();
     ValidationRuleAnalyticsJobParameters params = new ValidationRuleAnalyticsJobParameters();
-    params.setLookback(lookback);
+    params.setLastMonths(lastMonths);
     params.setValidationRuleGroups(
         java.util.Arrays.stream(groups).map(ValidationRuleGroup::getUid).toList());
     job.execute(
@@ -170,11 +170,11 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     value(deA, period, "1");
     value(deB, period, "2");
 
-    run("12 months", groupA);
+    run(12, groupA);
     assertEquals(1, store.count(rule));
 
     value(deB, period, "1");
-    run("12 months", groupA);
+    run(12, groupA);
     assertEquals(0, store.count(rule));
   }
 
@@ -184,11 +184,11 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     value(deA, period, "1");
     value(deB, period, "2");
 
-    run("12 months", groupA);
+    run(12, groupA);
     assertEquals(1, store.count(rule));
 
     value(deB, period, "1");
-    run("1 month", groupA);
+    run(1, groupA);
     assertEquals(1, store.count(rule));
   }
 
@@ -198,7 +198,7 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     value(deA, period, "1");
     value(deB, period, "2");
 
-    run("12 months", groupA, groupB);
+    run(12, groupA, groupB);
 
     assertEquals(1, store.count(rule));
   }
@@ -231,7 +231,7 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
                 2.0,
                 3)));
 
-    run("12 months", group);
+    run(12, group);
 
     assertEquals(1, store.count(ineligible));
   }
@@ -242,7 +242,7 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     value(deA, period, "1");
     value(deB, period, "2");
 
-    assertDoesNotThrow(() -> run("12 months", groupA));
+    assertDoesNotThrow(() -> run(12, groupA));
 
     assertEquals(1, store.count(rule));
   }
@@ -252,7 +252,7 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
     Period period = monthsAgo(0);
     value(deA, period, "1");
     value(deB, period, "2");
-    run("12 months", groupA);
+    run(12, groupA);
     assertEquals(1, store.count(rule));
 
     // the real analysis skips failing chunks and only reports them to the progress
@@ -269,7 +269,7 @@ class ValidationRuleAnalyticsJobTest extends PostgresIntegrationTestBase {
         new ValidationRuleAnalyticsJob(
             failing, validationRuleService, periodService, eligibility, store, transactionManager);
     ValidationRuleAnalyticsJobParameters params = new ValidationRuleAnalyticsJobParameters();
-    params.setLookback("12 months");
+    params.setLastMonths(12);
     params.setValidationRuleGroups(List.of(groupA.getUid()));
     JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
 

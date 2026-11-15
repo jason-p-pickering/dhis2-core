@@ -174,20 +174,20 @@ class JobConfigurationControllerTest extends H2ControllerIntegrationTestBase {
     String json =
         """
             {"name":"test","jobType":"VALIDATION_RULE_ANALYTICS","cronExpression":"0 0 3 ? * *",
-            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lookback":"6 years"}}""";
+            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lastMonths":72}}""";
     String jobId = assertStatus(HttpStatus.CREATED, POST("/jobConfigurations", json));
     JsonObject parameters = assertJobConfigurationExists(jobId, "VALIDATION_RULE_ANALYTICS");
     assertEquals("UiOSY1iIdub", parameters.getArray("validationRuleGroups").getString(0).string());
-    assertEquals("6 years", parameters.getString("lookback").string());
+    assertEquals(72, parameters.getNumber("lastMonths").intValue());
   }
 
   @Test
-  void testVALIDATION_RULE_ANALYTICS_InvalidLookback() {
+  void testVALIDATION_RULE_ANALYTICS_InvalidLastMonths() {
     // language=JSON
     String json =
         """
             {"name":"test","jobType":"VALIDATION_RULE_ANALYTICS","cronExpression":"0 0 3 ? * *",
-            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lookback":"3 fortnights"}}""";
+            "jobParameters":{"validationRuleGroups":["UiOSY1iIdub"],"lastMonths":0}}""";
     JsonWebMessage message =
         POST("/jobConfigurations", json).content(HttpStatus.CONFLICT).as(JsonWebMessage.class);
     assertNotNull(message.findErrorReport(ErrorCode.E4027));

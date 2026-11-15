@@ -43,7 +43,6 @@ import org.hisp.dhis.feedback.ErrorCode;
 import org.hisp.dhis.feedback.ErrorReport;
 import org.hisp.dhis.scheduling.JobParameters;
 import org.hisp.dhis.validation.ValidationRuleGroup;
-import org.hisp.dhis.validation.analytics.Lookback;
 
 /** Parameters of the validation rule analytics job. */
 @Getter
@@ -55,8 +54,11 @@ public class ValidationRuleAnalyticsJobParameters implements JobParameters {
   @OpenApi.Property({UID[].class, ValidationRuleGroup.class})
   private List<String> validationRuleGroups = new ArrayList<>();
 
-  /** Look-back window, e.g. "3 months" (see {@link Lookback}). */
-  @JsonProperty private String lookback = "12 months";
+  /**
+   * Number of months before the current month to evaluate. Each rule is evaluated for the periods
+   * of its own period type from the period containing that date up to the current period.
+   */
+  @JsonProperty private int lastMonths = 12;
 
   @Override
   public Optional<ErrorReport> validate() {
@@ -69,10 +71,10 @@ public class ValidationRuleAnalyticsJobParameters implements JobParameters {
             new ErrorReport(this.getClass(), ErrorCode.E4014, group, "validationRuleGroups"));
       }
     }
-    try {
-      Lookback.parse(lookback);
-    } catch (IllegalArgumentException ex) {
-      return Optional.of(new ErrorReport(this.getClass(), ErrorCode.E4027, lookback, "lookback"));
+    if (lastMonths < 1) {
+      return Optional.of(
+          new ErrorReport(
+              this.getClass(), ErrorCode.E4027, String.valueOf(lastMonths), "lastMonths"));
     }
     return Optional.empty();
   }
