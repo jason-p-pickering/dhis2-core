@@ -102,4 +102,32 @@ public interface ValidationResultService {
       boolean includeOrgUnitDescendants,
       Collection<ValidationRule> validationRules,
       Collection<Period> periods);
+
+  /**
+   * Brings the persisted results of the given scope in line with the results of an analysis of that
+   * scope. A violation is identified by rule, period, org unit and attribute option combo.
+   *
+   * <ul>
+   *   <li>Violations already persisted and still found are kept, with their notification state;
+   *       their left and right side values are updated.
+   *   <li>Violations found but not yet persisted are saved.
+   *   <li>Persisted violations not found any more are deleted, but only if {@code removeResolved}
+   *       is true. Pass false when the analysis was incomplete.
+   * </ul>
+   *
+   * @param orgUnit the root of the analysed org units, or null for all org units
+   * @param includeOrgUnitDescendants whether the descendants of {@code orgUnit} were analysed
+   * @param validationRules the analysed rules
+   * @param periods the analysed periods
+   * @param currentResults the violations found by the analysis
+   * @param removeResolved whether to delete persisted violations that were not found
+   * @return the persisted violations of the scope after the update
+   */
+  List<ValidationResult> replaceValidationResults(
+      OrganisationUnit orgUnit,
+      boolean includeOrgUnitDescendants,
+      Collection<ValidationRule> validationRules,
+      Collection<Period> periods,
+      Collection<ValidationResult> currentResults,
+      boolean removeResolved);
 }

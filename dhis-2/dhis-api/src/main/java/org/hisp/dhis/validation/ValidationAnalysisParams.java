@@ -77,6 +77,8 @@ public final class ValidationAnalysisParams {
 
   private boolean applyUserDimensionConstraints = true;
 
+  private boolean replacePersistedResults = false;
+
   /**
    * Gets the rules selected for analysis
    *
@@ -184,6 +186,16 @@ public final class ValidationAnalysisParams {
     return applyUserDimensionConstraints;
   }
 
+  /**
+   * Gets whether persisting replaces the persisted results of the analysed rules, periods and org
+   * units with the results of this analysis, instead of only adding new ones. Defaults to false.
+   *
+   * @return true if persisted results are replaced.
+   */
+  public boolean isReplacePersistedResults() {
+    return replacePersistedResults;
+  }
+
   public static class Builder {
     private ValidationAnalysisParams params;
 
@@ -288,6 +300,25 @@ public final class ValidationAnalysisParams {
      */
     public Builder withApplyUserDimensionConstraints(boolean applyUserDimensionConstraints) {
       this.params.applyUserDimensionConstraints = applyUserDimensionConstraints;
+      return this;
+    }
+
+    /**
+     * If set to true (together with persisting results), the persisted results of the analysed
+     * rules, periods and org units are replaced by this analysis: resolved violations are removed.
+     * Persisted results are then not used to skip evaluation, and the current user's dimension
+     * constraints are not applied, so the whole scope is evaluated.
+     *
+     * @param replacePersistedResults true to replace persisted results.
+     * @return the updated builder object
+     */
+    public Builder withReplacePersistedResults(boolean replacePersistedResults) {
+      this.params.replacePersistedResults = replacePersistedResults;
+      if (replacePersistedResults) {
+        // Evaluate the whole scope: anything skipped would be removed as resolved
+        this.params.includePersistedResults = false;
+        this.params.applyUserDimensionConstraints = false;
+      }
       return this;
     }
 

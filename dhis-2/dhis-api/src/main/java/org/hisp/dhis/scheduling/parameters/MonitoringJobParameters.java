@@ -66,6 +66,13 @@ public class MonitoringJobParameters implements JobParameters {
 
   @JsonProperty private boolean persistResults;
 
+  /**
+   * When persisting results, replace the persisted results of the job's rules and periods with the
+   * current violations: violations that no longer occur are removed, ongoing ones are kept with
+   * their notification state, new ones are added. Without it, persisted results only ever grow.
+   */
+  @JsonProperty private boolean replaceResults;
+
   public MonitoringJobParameters(
       int relativeStart,
       int relativeEnd,

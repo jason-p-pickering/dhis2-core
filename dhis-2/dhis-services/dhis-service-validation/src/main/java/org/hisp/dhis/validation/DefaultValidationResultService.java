@@ -34,7 +34,9 @@ import static org.hisp.dhis.common.collection.CollectionUtils.isEmpty;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -141,6 +143,71 @@ public class DefaultValidationResultService implements ValidationResultService {
     List<Period> persistedPeriods = periodService.reloadPeriods(new ArrayList<>(periods));
     return validationResultStore.getValidationResults(
         orgUnit, includeOrgUnitDescendants, validationRules, persistedPeriods);
+  }
+
+  @Transactional
+  @Override
+  public List<ValidationResult> replaceValidationResults(
+      OrganisationUnit orgUnit,
+      boolean includeOrgUnitDescendants,
+      Collection<ValidationRule> validationRules,
+      Collection<Period> periods,
+      Collection<ValidationResult> currentResults,
+      boolean removeResolved) {
+    Map<ViolationKey, ValidationResult> current = new LinkedHashMap<>();
+    for (ValidationResult result : currentResults) {
+      result.setPeriod(periodService.reloadPeriod(result.getPeriod()));
+      current.putIfAbsent(ViolationKey.of(result), result);
+    }
+
+    Map<ViolationKey, ValidationResult> persisted = new LinkedHashMap<>();
+    int deleted = 0;
+    for (ValidationResult existing :
+        getValidationResults(orgUnit, includeOrgUnitDescendants, validationRules, periods)) {
+      ViolationKey key = ViolationKey.of(existing);
+      ValidationResult found = current.get(key);
+      boolean duplicate = persisted.containsKey(key);
+      if (found != null && !duplicate) {
+        existing.setLeftsideValue(found.getLeftsideValue());
+        existing.setRightsideValue(found.getRightsideValue());
+        validationResultStore.update(existing);
+        persisted.put(key, existing);
+      } else if (removeResolved || (found != null && duplicate)) {
+        validationResultStore.delete(existing);
+        deleted++;
+      } else {
+        persisted.put(key, existing);
+      }
+    }
+
+    int added = 0;
+    for (Map.Entry<ViolationKey, ValidationResult> entry : current.entrySet()) {
+      if (!persisted.containsKey(entry.getKey())) {
+        validationResultStore.save(entry.getValue());
+        persisted.put(entry.getKey(), entry.getValue());
+        added++;
+      }
+    }
+
+    log.info(
+        "Replaced validation results: {} kept, {} added, {} deleted{}",
+        persisted.size() - added,
+        added,
+        deleted,
+        removeResolved ? "" : " (resolved violations kept: analysis incomplete)");
+
+    return new ArrayList<>(persisted.values());
+  }
+
+  /** Identifies a violation regardless of the day in the period on which it was found. */
+  private record ViolationKey(long rule, long period, long orgUnit, long attributeOptionCombo) {
+    static ViolationKey of(ValidationResult result) {
+      return new ViolationKey(
+          result.getValidationRule().getId(),
+          result.getPeriod().getId(),
+          result.getOrganisationUnit().getId(),
+          result.getAttributeOptionCombo().getId());
+    }
   }
 
   private void validate(ValidationResultsDeletionRequest request) {

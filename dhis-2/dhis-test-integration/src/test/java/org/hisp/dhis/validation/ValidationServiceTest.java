@@ -44,6 +44,7 @@ import static org.hisp.dhis.expression.Operator.not_equal_to;
 import static org.hisp.dhis.expression.ParseType.SIMPLE_TEST;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.google.common.collect.Lists;
@@ -134,6 +135,8 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
   @Autowired private IdentifiableObjectManager identifiableObjectManager;
 
   @Autowired private UserService injectUserService;
+
+  @Autowired private ValidationResultService validationResultService;
 
   private DataElement dataElementA;
 
@@ -1741,6 +1744,71 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
     ValidationAnalysisParams params =
         validationService.newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA)).build();
     assertEquals(1, runValidationAnalysis(params).size());
+  }
+
+  private List<ValidationResult> persistedResultsSourceAPeriodA() {
+    return validationResultService.getValidationResults(
+        sourceA, false, List.of(ruleA), List.of(periodA));
+  }
+
+  private ValidationAnalysisParams.Builder replacingParams() {
+    return validationService
+        .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+        .withPersistResults(true)
+        .withReplacePersistedResults(true);
+  }
+
+  @Test
+  void testPersistWithoutReplaceKeepsResolvedViolation() {
+    persistViolationThenFixData();
+    runValidationAnalysis(
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withPersistResults(true)
+            .build());
+    assertEquals(1, persistedResultsSourceAPeriodA().size());
+  }
+
+  @Test
+  void testReplaceRemovesResolvedViolation() {
+    persistViolationThenFixData();
+    assertEquals(1, persistedResultsSourceAPeriodA().size());
+
+    assertResultsEmpty(runValidationAnalysis(replacingParams().build()));
+    assertTrue(persistedResultsSourceAPeriodA().isEmpty());
+  }
+
+  @Test
+  void testReplaceKeepsOngoingViolationWithNotificationState() {
+    useDataValue(dataElementA, periodA, sourceA, "1");
+    useDataValue(dataElementB, periodA, sourceA, "2");
+    useDataValue(dataElementC, periodA, sourceA, "3");
+    useDataValue(dataElementD, periodA, sourceA, "4");
+    validationRuleService.saveValidationRule(ruleA);
+    runValidationAnalysis(replacingParams().build());
+    List<ValidationResult> first = persistedResultsSourceAPeriodA();
+    assertEquals(1, first.size());
+    ValidationResult original = first.get(0);
+    original.setNotificationSent(true);
+    validationResultService.updateValidationResults(Set.of(original));
+
+    // still violated (3 != 0), with a different right side
+    useDataValue(dataElementC, periodA, sourceA, "4");
+    runValidationAnalysis(replacingParams().build());
+
+    List<ValidationResult> second = persistedResultsSourceAPeriodA();
+    assertEquals(1, second.size());
+    assertEquals(original.getId(), second.get(0).getId());
+    assertTrue(second.get(0).getNotificationSent());
+    assertEquals(0.0, second.get(0).getRightsideValue());
+  }
+
+  @Test
+  void testReplaceKeepsResolvedViolationWhenAnalysisIncomplete() {
+    persistViolationThenFixData();
+    // a result limit of 0 marks the analysis as incomplete
+    runValidationAnalysis(replacingParams().withMaxResults(0).build());
+    assertEquals(1, persistedResultsSourceAPeriodA().size());
   }
 
   @Test

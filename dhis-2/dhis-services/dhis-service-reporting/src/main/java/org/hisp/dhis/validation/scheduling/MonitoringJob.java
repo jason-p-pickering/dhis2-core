@@ -101,6 +101,7 @@ public class MonitoringJob implements Job {
               .withMaxResults(ValidationService.MAX_SCHEDULED_ALERTS)
               .withSendNotifications(params.isSendNotifications())
               .withPersistResults(params.isPersistResults())
+              .withReplacePersistedResults(params.isPersistResults() && params.isReplaceResults())
               .build();
 
       validationService.validationAnalysis(parameters, progress);

@@ -140,9 +140,35 @@ public class DefaultValidationService implements ValidationService {
 
     clock.logTime("Initialized validation analysis");
 
-    List<ValidationResult> results = Validator.validate(context, runner, progress);
+    boolean replace = context.isPersistResults() && parameters.isReplacePersistedResults();
+    FailureTrackingProgress tracking = replace ? new FailureTrackingProgress(progress) : null;
 
-    if (context.isPersistResults()) {
+    List<ValidationResult> results =
+        Validator.validate(context, runner, replace ? tracking : progress);
+
+    if (replace) {
+      boolean complete = !tracking.hasFailed() && !context.isAnalysisComplete();
+      if (!complete) {
+        log.warn(
+            "Validation analysis incomplete ({}); persisted results are updated but resolved"
+                + " violations are not removed",
+            tracking.hasFailed()
+                ? "failed: " + tracking.firstFailure()
+                : "reached " + parameters.getMaxResults() + " results");
+      }
+      progress.startingStage("Replacing persisted results", SKIP_STAGE);
+      results =
+          progress.runStage(
+              results,
+              () ->
+                  validationResultService.replaceValidationResults(
+                      parameters.getOrgUnit(),
+                      parameters.isIncludeOrgUnitDescendants(),
+                      parameters.getValidationRules(),
+                      parameters.getPeriods(),
+                      context.getValidationResults(),
+                      complete));
+    } else if (context.isPersistResults()) {
       progress.startingStage("Persisting Results", SKIP_STAGE);
       progress.runStage(
           () -> validationResultService.saveValidationResults(context.getValidationResults()));
