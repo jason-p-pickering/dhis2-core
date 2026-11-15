@@ -82,5 +82,8 @@
 
     <many-to-one name="expressionDimensionItem" class="org.hisp.dhis.expressiondimensionitem.ExpressionDimensionItem"
         column="expressiondimensionitemid" foreign-key="fk_datadimensionitem_expressiondimensionitemid" />
+
+    <many-to-one name="validationRule" class="org.hisp.dhis.validation.ValidationRule"
+        column="validationruleid" foreign-key="fk_datadimensionitem_validationruleid" />
   </class>
 </hibernate-mapping>

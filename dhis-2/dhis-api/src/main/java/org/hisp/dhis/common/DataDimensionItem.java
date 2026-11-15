@@ -119,6 +119,8 @@ public class DataDimensionItem {
 
   private ProgramTrackedEntityAttributeOptionDimensionItem programAttributeOption;
 
+  private ValidationRule validationRule;
+
   // -------------------------------------------------------------------------
   // Constructor
   // -------------------------------------------------------------------------
@@ -191,6 +193,8 @@ public class DataDimensionItem {
         object.getClass())) {
       dimension.setProgramAttributeOption(
           (ProgramTrackedEntityAttributeOptionDimensionItem) object);
+    } else if (ValidationRule.class.isAssignableFrom(object.getClass())) {
+      dimension.setValidationRule((ValidationRule) object);
     } else {
       throw new IllegalArgumentException(
           "Not a valid data dimension: " + object.getClass().getSimpleName() + ", " + object);
@@ -226,6 +230,8 @@ public class DataDimensionItem {
       return programDataElementOption;
     } else if (programAttributeOption != null) {
       return programAttributeOption;
+    } else if (validationRule != null) {
+      return validationRule;
     }
 
     return null;
@@ -254,6 +260,8 @@ public class DataDimensionItem {
       return PROGRAM_DATA_ELEMENT_OPTION;
     } else if (programAttributeOption != null) {
       return PROGRAM_ATTRIBUTE_OPTION;
+    } else if (validationRule != null) {
+      return DataDimensionItemType.VALIDATION_RULE;
     }
 
     return null;
@@ -411,6 +419,17 @@ public class DataDimensionItem {
 
   public void setExpressionDimensionItem(ExpressionDimensionItem expressionDimensionItem) {
     this.expressionDimensionItem = expressionDimensionItem;
+  }
+
+  @JsonProperty
+  @JsonSerialize(as = BaseNameableObject.class)
+  @JacksonXmlProperty(namespace = DXF_2_0)
+  public ValidationRule getValidationRule() {
+    return validationRule;
+  }
+
+  public void setValidationRule(ValidationRule validationRule) {
+    this.validationRule = validationRule;
   }
 
   @JsonProperty
