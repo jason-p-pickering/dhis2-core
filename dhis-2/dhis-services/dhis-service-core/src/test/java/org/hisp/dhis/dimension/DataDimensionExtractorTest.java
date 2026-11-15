@@ -42,6 +42,7 @@ import static org.hisp.dhis.common.DimensionItemType.PROGRAM_DATA_ELEMENT;
 import static org.hisp.dhis.common.DimensionItemType.PROGRAM_INDICATOR;
 import static org.hisp.dhis.common.DimensionItemType.REPORTING_RATE;
 import static org.hisp.dhis.common.DimensionItemType.SUBEXPRESSION_DIMENSION_ITEM;
+import static org.hisp.dhis.common.DimensionItemType.VALIDATION_RULE;
 
 import java.util.Set;
 import org.hisp.dhis.category.CategoryOptionCombo;
@@ -54,6 +55,7 @@ import org.hisp.dhis.indicator.Indicator;
 import org.hisp.dhis.program.Program;
 import org.hisp.dhis.program.ProgramIndicator;
 import org.hisp.dhis.trackedentity.TrackedEntityAttribute;
+import org.hisp.dhis.validation.ValidationRule;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -110,6 +112,20 @@ class DataDimensionExtractorTest {
     // Then
     assertThat(result.size(), is(equalTo(1)));
     assertThat(result.get(Indicator.class), containsInAnyOrder(indicatorItem.getId0()));
+  }
+
+  @Test
+  void testGetAtomicIdsForValidationRule() {
+    // Given
+    final DimensionalItemId ruleItem = new DimensionalItemId(VALIDATION_RULE, "id0");
+
+    // When
+    final SetMap<Class<? extends IdentifiableObject>, String> result =
+        new DataDimensionExtractor(null).getAtomicIds(newHashSet(ruleItem));
+
+    // Then
+    assertThat(result.size(), is(equalTo(1)));
+    assertThat(result.get(ValidationRule.class), containsInAnyOrder(ruleItem.getId0()));
   }
 
   @Test

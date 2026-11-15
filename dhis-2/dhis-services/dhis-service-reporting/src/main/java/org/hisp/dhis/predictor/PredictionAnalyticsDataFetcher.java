@@ -186,6 +186,10 @@ public class PredictionAnalyticsDataFetcher {
    * option combo
    */
   private boolean hasAttributeOptions(DimensionalItemObject o) {
+    if (o.getDimensionItemType() == DimensionItemType.VALIDATION_RULE) {
+      return false; // analytics_validationresult has no attribute option combo column
+    }
+
     return o.getDimensionItemType() != DimensionItemType.PROGRAM_INDICATOR
         || ((ProgramIndicator) o).getAnalyticsType() != AnalyticsType.ENROLLMENT;
   }
