@@ -46,6 +46,7 @@ import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.FAIL;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM_OUTLIER;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -99,6 +100,7 @@ import org.hisp.dhis.period.YearlyPeriodType;
 import org.hisp.dhis.program.Program;
 import org.hisp.dhis.program.ProgramService;
 import org.hisp.dhis.scheduling.JobProgress;
+import org.hisp.dhis.scheduling.RecordingJobProgress;
 import org.hisp.dhis.setting.ThreadUserSettings;
 import org.hisp.dhis.test.integration.PostgresIntegrationTestBase;
 import org.hisp.dhis.translation.Translation;
@@ -1813,12 +1815,46 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
 
   @Test
   void testReplaceAbortsOnFailingChunk() {
+    // event data is fetched through analytics, which fails without analytics tables
+    Program program = createProgram('A');
+    programService.addProgram(program);
+    ValidationRule rule =
+        createValidationRule(
+            "I",
+            equal_to,
+            createExpression2('I', "D{" + program.getUid() + "." + dataElementA.getUid() + "}"),
+            createExpression2('J', "1"),
+            ptMonthly);
+    validationRuleService.saveValidationRule(rule);
+    validationResultService.saveValidationResults(
+        List.of(
+            createValidationResult(rule, periodA, sourceA, defaultCombo, 2.0, 1.0, dayInPeriodA)));
+    ValidationAnalysisParams params =
+        validationService
+            .newParamsBuilder(List.of(rule), sourceA, List.of(periodA))
+            .withPersistResults(true)
+            .withReplacePersistedResults(true)
+            .build();
+
+    // treating the failure as missing data would remove a violation that was never evaluated;
+    // the failure surfaces as is (one chunk) or as a cancellation (parallel chunks)
+    JobProgress progress = RecordingJobProgress.transitory();
+    assertThrows(
+        RuntimeException.class, () -> validationService.validationAnalysis(params, progress));
+    assertEquals(
+        1,
+        validationResultService
+            .getValidationResults(sourceA, false, List.of(rule), List.of(periodA))
+            .size());
+  }
+
+  @Test
+  void testReplaceUsesFailPolicyForChunks() {
     persistViolationThenFixData();
     JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
 
     validationService.validationAnalysis(replacingParams().build(), progress);
 
-    // replacing from partial results would delete violations that were never evaluated
     verify(progress).startingStage(startsWith("Evaluating validation rules"), anyInt(), eq(FAIL));
   }
 

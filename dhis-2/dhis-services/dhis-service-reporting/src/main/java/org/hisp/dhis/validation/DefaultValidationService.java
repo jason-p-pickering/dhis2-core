@@ -297,6 +297,8 @@ public class DefaultValidationService implements ValidationService {
             .withPeriodTypeXs(new ArrayList<>(periodTypeXMap.values()))
             .withSendNotifications(parameters.isSendNotifications())
             .withPersistResults(parameters.isPersistResults())
+            .withFailOnAnalyticsError(
+                parameters.isPersistResults() && parameters.isReplacePersistedResults())
             .withAttributeCombo(parameters.getAttributeOptionCombo())
             .withDefaultAttributeCombo(categoryService.getDefaultCategoryOptionCombo())
             .withBaseExParams(baseExParams)
