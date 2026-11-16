@@ -30,6 +30,8 @@
 package org.hisp.dhis.validation;
 
 import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.FAIL;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM_OUTLIER;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_STAGE;
 
 import com.google.common.collect.Iterables;
@@ -141,20 +143,19 @@ public class DefaultValidationService implements ValidationService {
     clock.logTime("Initialized validation analysis");
 
     boolean replace = context.isPersistResults() && parameters.isReplacePersistedResults();
-    FailureTrackingProgress tracking = replace ? new FailureTrackingProgress(progress) : null;
 
+    // Replacing removes persisted violations that were not found again, so it must not run on
+    // partial results: a failing org unit chunk aborts the analysis instead of being skipped
     List<ValidationResult> results =
-        Validator.validate(context, runner, replace ? tracking : progress);
+        Validator.validate(context, runner, progress, replace ? FAIL : SKIP_ITEM_OUTLIER);
 
     if (replace) {
-      boolean complete = !tracking.hasFailed() && !context.isAnalysisComplete();
+      boolean complete = !context.isAnalysisComplete();
       if (!complete) {
         log.warn(
-            "Validation analysis incomplete ({}); persisted results are updated but resolved"
+            "Validation analysis reached {} results; persisted results are updated but resolved"
                 + " violations are not removed",
-            tracking.hasFailed()
-                ? "failed: " + tracking.firstFailure()
-                : "reached " + parameters.getMaxResults() + " results");
+            parameters.getMaxResults());
       }
       progress.startingStage("Replacing persisted results", SKIP_STAGE);
       results =

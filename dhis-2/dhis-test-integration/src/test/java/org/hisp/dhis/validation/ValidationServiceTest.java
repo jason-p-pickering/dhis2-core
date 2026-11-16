@@ -42,10 +42,18 @@ import static org.hisp.dhis.expression.Operator.less_than;
 import static org.hisp.dhis.expression.Operator.less_than_or_equal_to;
 import static org.hisp.dhis.expression.Operator.not_equal_to;
 import static org.hisp.dhis.expression.ParseType.SIMPLE_TEST;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.FAIL;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM_OUTLIER;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -1801,6 +1809,33 @@ class ValidationServiceTest extends PostgresIntegrationTestBase {
     assertEquals(original.getId(), second.get(0).getId());
     assertTrue(second.get(0).getNotificationSent());
     assertEquals(0.0, second.get(0).getRightsideValue());
+  }
+
+  @Test
+  void testReplaceAbortsOnFailingChunk() {
+    persistViolationThenFixData();
+    JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
+
+    validationService.validationAnalysis(replacingParams().build(), progress);
+
+    // replacing from partial results would delete violations that were never evaluated
+    verify(progress).startingStage(startsWith("Evaluating validation rules"), anyInt(), eq(FAIL));
+  }
+
+  @Test
+  void testPersistWithoutReplaceSkipsFailingChunk() {
+    persistViolationThenFixData();
+    JobProgress progress = mock(JobProgress.class, CALLS_REAL_METHODS);
+
+    validationService.validationAnalysis(
+        validationService
+            .newParamsBuilder(List.of(ruleA), sourceA, List.of(periodA))
+            .withPersistResults(true)
+            .build(),
+        progress);
+
+    verify(progress)
+        .startingStage(startsWith("Evaluating validation rules"), anyInt(), eq(SKIP_ITEM_OUTLIER));
   }
 
   @Test

@@ -190,6 +190,12 @@ public final class ValidationAnalysisParams {
    * Gets whether persisting replaces the persisted results of the analysed rules, periods and org
    * units with the results of this analysis, instead of only adding new ones. Defaults to false.
    *
+   * <p>When replacing, a failing org unit chunk aborts the analysis ({@link
+   * org.hisp.dhis.scheduling.JobProgress.FailurePolicy#FAIL}) instead of being skipped, so that
+   * persisted results are never replaced from partial results. The abort is carried out by the
+   * {@link org.hisp.dhis.scheduling.JobProgress} of the run; {@link
+   * org.hisp.dhis.scheduling.JobProgress#noop()} does not abort.
+   *
    * @return true if persisted results are replaced.
    */
   public boolean isReplacePersistedResults() {
