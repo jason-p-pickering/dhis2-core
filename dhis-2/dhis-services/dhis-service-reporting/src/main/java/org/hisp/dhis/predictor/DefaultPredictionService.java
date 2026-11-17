@@ -67,6 +67,7 @@ import org.hisp.dhis.common.DimensionalItemObject;
 import org.hisp.dhis.common.IdentifiableObjectManager;
 import org.hisp.dhis.common.ListMap;
 import org.hisp.dhis.common.MapMap;
+import org.hisp.dhis.common.UID;
 import org.hisp.dhis.commons.util.DebugUtils;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementOperand;
@@ -307,6 +308,13 @@ public class DefaultPredictionService implements PredictionService {
           organisationUnitService.getOrganisationUnitsAtOrgUnitLevels(
               Lists.newArrayList(orgUnitLevel), currentUserOrgUnits);
 
+      ExpressionParams levelExParams =
+          baseExParams.toBuilder()
+              .orgUnitGroupMemberCounts(
+                  expressionService.getOrgUnitGroupMemberCounts(
+                      UID.of(exInfo.getOrgUnitGroupCountIds()), orgUnits, currentUserOrgUnits))
+              .build();
+
       consolidator.init(
           orgUnitLevel.getLevel(),
           orgUnits,
@@ -333,7 +341,7 @@ public class DefaultPredictionService implements PredictionService {
           samplePeriods.removeAll(
               getSkippedPeriods(
                   allSamplePeriods,
-                  baseExParams,
+                  levelExParams,
                   c.getPeriodValueMap(),
                   skipTest,
                   data.getOrgUnit()));
@@ -350,7 +358,7 @@ public class DefaultPredictionService implements PredictionService {
 
           Object value =
               expressionService.getExpressionValue(
-                  baseExParams.toBuilder()
+                  levelExParams.toBuilder()
                       .expression(predictor.getGenerator().getExpression())
                       .parseType(PREDICTOR_EXPRESSION)
                       .dataType(expressionDataType)
