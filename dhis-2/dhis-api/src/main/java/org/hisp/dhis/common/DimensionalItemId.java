@@ -151,7 +151,8 @@ public class DimensionalItemId {
 
   public boolean hasValidIds() {
     return switch (dimensionItemType) {
-      case DATA_ELEMENT, INDICATOR, PROGRAM_INDICATOR -> id0 != null && id1 == null && id2 == null;
+      case DATA_ELEMENT, INDICATOR, PROGRAM_INDICATOR, VALIDATION_RULE ->
+          id0 != null && id1 == null && id2 == null;
       case DATA_ELEMENT_OPERAND -> id0 != null && (id1 != null || id2 != null);
       case REPORTING_RATE ->
           id0 != null && id1 != null && id2 == null && isValidEnum(ReportingRateMetric.class, id1);

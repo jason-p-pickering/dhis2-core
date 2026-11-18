@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,8 @@
 package org.hisp.dhis.validation;
 
 import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.FAIL;
+import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM_OUTLIER;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_STAGE;
 
 import com.google.common.collect.Iterables;
@@ -140,12 +142,35 @@ public class DefaultValidationService implements ValidationService {
 
     clock.logTime("Initialized validation analysis");
 
-    List<ValidationResult> results = Validator.validate(context, runner, progress);
+    boolean replace = context.isPersistResults() && parameters.isReplacePersistedResults();
 
-    if (context.isPersistResults()) {
+    // Replacing removes persisted violations that were not found again, so it must not run on
+    // partial results: a failing org unit chunk aborts the analysis instead of being skipped
+    List<ValidationResult> results =
+        Validator.validate(context, runner, progress, replace ? FAIL : SKIP_ITEM_OUTLIER);
+
+    if (replace) {
+      boolean complete = !context.isAnalysisComplete();
+      if (!complete) {
+        log.warn(
+            "Validation analysis reached {} results; persisted results are updated but resolved"
+                + " violations are not removed",
+            parameters.getMaxResults());
+      }
+      progress.startingStage("Replacing persisted results", SKIP_STAGE);
+      progress.runStage(
+          () ->
+              validationResultService.replaceValidationResults(
+                  parameters.getOrgUnit(),
+                  parameters.isIncludeOrgUnitDescendants(),
+                  parameters.getValidationRules(),
+                  parameters.getPeriods(),
+                  context.getValidationResults(),
+                  complete));
+    } else if (context.isPersistResults()) {
       progress.startingStage("Persisting Results", SKIP_STAGE);
       progress.runStage(
-          () -> validationResultService.saveValidationResults(context.getValidationResults()));
+          () -> validationResultService.upsertValidationResults(context.getValidationResults()));
     }
 
     clock
@@ -270,25 +295,21 @@ public class DefaultValidationService implements ValidationService {
             .withPeriodTypeXs(new ArrayList<>(periodTypeXMap.values()))
             .withSendNotifications(parameters.isSendNotifications())
             .withPersistResults(parameters.isPersistResults())
+            .withFailOnAnalyticsError(
+                parameters.isPersistResults() && parameters.isReplacePersistedResults())
             .withAttributeCombo(parameters.getAttributeOptionCombo())
             .withDefaultAttributeCombo(categoryService.getDefaultCategoryOptionCombo())
             .withBaseExParams(baseExParams)
             .withItemMap(baseExParams.getItemMap())
             .withMaxResults(parameters.getMaxResults());
 
-    if (currentUser != null) {
+    if (currentUser != null && parameters.isApplyUserDimensionConstraints()) {
       builder
           .withCoDimensionConstraints(categoryService.getCoDimensionConstraints(currentUser))
           .withCogDimensionConstraints(categoryService.getCogDimensionConstraints(currentUser));
     }
 
-    List<ValidationResult> initialResults =
-        validationResultService.getValidationResults(
-            parameters.getOrgUnit(),
-            parameters.isIncludeOrgUnitDescendants(),
-            parameters.getValidationRules(),
-            parameters.getPeriods());
-    return builder.build().addInitialResults(initialResults);
+    return builder.build();
   }
 
   private Map<PeriodType, PeriodTypeExtended> getExtendedPeriods(

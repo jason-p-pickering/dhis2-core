@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,17 +32,23 @@ package org.hisp.dhis.validation.hibernate;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.hisp.dhis.common.collection.CollectionUtils.isEmpty;
 
+import com.google.common.collect.Lists;
 import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.hibernate.query.NativeQuery;
 import org.hibernate.query.Query;
+import org.hibernate.type.DoubleType;
 import org.hisp.dhis.category.Category;
 import org.hisp.dhis.category.CategoryOptionGroupSet;
 import org.hisp.dhis.common.IdentifiableObject;
@@ -82,6 +88,149 @@ public class HibernateValidationResultStore extends HibernateGenericStore<Valida
     super(entityManager, jdbcTemplate, publisher, ValidationResult.class, true);
     checkNotNull(userService);
     this.userService = userService;
+  }
+
+  /** Rows per insert statement, keeping the bind parameters well below the JDBC limit. */
+  private static final int UPSERT_BATCH_SIZE = 1000;
+
+  @Override
+  public void upsert(Collection<ValidationResult> validationResults) {
+    // a statement must not insert or update the same row twice; a fixed row order means
+    // concurrent upserts lock conflicting rows in the same order and cannot deadlock
+    Map<UpsertKey, ValidationResult> unique = new TreeMap<>();
+    for (ValidationResult result : validationResults) {
+      unique.putIfAbsent(UpsertKey.of(result), result);
+    }
+    if (unique.isEmpty()) {
+      return;
+    }
+
+    // the insert references rules, org units and attribute option combos by id; flush so ones
+    // saved earlier in this transaction exist (synchronizing on their entities instead would
+    // invalidate their cached queries on every upsert)
+    getSession().flush();
+
+    for (List<ValidationResult> batch :
+        Lists.partition(new ArrayList<>(unique.values()), UPSERT_BATCH_SIZE)) {
+      StringBuilder sql =
+          new StringBuilder(
+              """
+              insert into validationresult (created, leftsidevalue, rightsidevalue,
+                validationruleid, periodid, organisationunitid, attributeoptioncomboid,
+                dayinperiod, notificationsent)
+              values\s""");
+      int param = 1;
+      for (int i = 0; i < batch.size(); i++) {
+        sql.append(i == 0 ? "" : ", ").append("(now()");
+        for (int j = 0; j < 8; j++) {
+          sql.append(", ?").append(param++);
+        }
+        sql.append(")");
+      }
+      sql.append(
+          """
+           on conflict (validationruleid, periodid, organisationunitid, attributeoptioncomboid,
+             dayinperiod)
+           do update set leftsidevalue = excluded.leftsidevalue,
+             rightsidevalue = excluded.rightsidevalue
+           where validationresult.leftsidevalue is distinct from excluded.leftsidevalue
+             or validationresult.rightsidevalue is distinct from excluded.rightsidevalue""");
+
+      // synchronizing on the entity invalidates cached validation result queries
+      NativeQuery<?> query =
+          getSession()
+              .createNativeQuery(sql.toString())
+              .addSynchronizedEntityClass(ValidationResult.class);
+      param = 1;
+      for (ValidationResult result : batch) {
+        query.setParameter(param++, result.getLeftsideValue(), DoubleType.INSTANCE);
+        query.setParameter(param++, result.getRightsideValue(), DoubleType.INSTANCE);
+        query.setParameter(param++, result.getValidationRule().getId());
+        query.setParameter(param++, result.getPeriod().getId());
+        query.setParameter(param++, result.getOrganisationUnit().getId());
+        query.setParameter(param++, result.getAttributeOptionCombo().getId());
+        query.setParameter(param++, result.getDayInPeriod());
+        query.setParameter(param++, Boolean.TRUE.equals(result.getNotificationSent()));
+      }
+      query.executeUpdate();
+    }
+  }
+
+  @Override
+  public List<Row> getRows(
+      OrganisationUnit orgUnit,
+      boolean includeOrgUnitDescendants,
+      Collection<ValidationRule> validationRules,
+      Collection<Period> periods) {
+    if (isEmpty(validationRules) || isEmpty(periods)) {
+      return new ArrayList<>();
+    }
+    String orgUnitFilter = orgUnit == null ? "" : "vr.organisationUnit.path like :orgUnitPath and ";
+    Query<Object[]> query =
+        getSession()
+            .createQuery(
+                "select vr.id, vr.validationRule.id, vr.period.id, vr.organisationUnit.id,"
+                    + " vr.attributeOptionCombo.id, vr.dayInPeriod, vr.notificationSent"
+                    + " from ValidationResult vr where "
+                    + orgUnitFilter
+                    + "vr.validationRule in :validationRules and vr.period in :periods",
+                Object[].class);
+    if (orgUnit != null) {
+      query.setParameter(
+          "orgUnitPath", orgUnit.getStoredPath() + (includeOrgUnitDescendants ? "%" : ""));
+    }
+    query.setParameter("validationRules", validationRules);
+    query.setParameter("periods", periods);
+    return query.list().stream()
+        .map(
+            r ->
+                new Row(
+                    (Long) r[0],
+                    (Long) r[1],
+                    (Long) r[2],
+                    (Long) r[3],
+                    (Long) r[4],
+                    (Integer) r[5],
+                    Boolean.TRUE.equals(r[6])))
+        .toList();
+  }
+
+  /** Ids per delete statement. */
+  private static final int DELETE_BATCH_SIZE = 10_000;
+
+  @Override
+  public void deleteByIds(Collection<Long> ids) {
+    for (List<Long> batch : Lists.partition(new ArrayList<>(ids), DELETE_BATCH_SIZE)) {
+      getSession()
+          .createQuery("delete from ValidationResult vr where vr.id in :ids")
+          .setParameter("ids", batch)
+          .executeUpdate();
+    }
+  }
+
+  /** The unique key of a validation result, ordered by its columns. */
+  private record UpsertKey(long rule, long period, long orgUnit, long aoc, int dayInPeriod)
+      implements Comparable<UpsertKey> {
+    private static final Comparator<UpsertKey> ORDER =
+        Comparator.comparingLong(UpsertKey::rule)
+            .thenComparingLong(UpsertKey::period)
+            .thenComparingLong(UpsertKey::orgUnit)
+            .thenComparingLong(UpsertKey::aoc)
+            .thenComparingInt(UpsertKey::dayInPeriod);
+
+    static UpsertKey of(ValidationResult result) {
+      return new UpsertKey(
+          result.getValidationRule().getId(),
+          result.getPeriod().getId(),
+          result.getOrganisationUnit().getId(),
+          result.getAttributeOptionCombo().getId(),
+          result.getDayInPeriod());
+    }
+
+    @Override
+    public int compareTo(UpsertKey other) {
+      return ORDER.compare(this, other);
+    }
   }
 
   @Override

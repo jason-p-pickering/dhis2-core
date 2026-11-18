@@ -498,6 +498,7 @@ public enum ErrorCode {
   E7005("Cron expression is invalid: `{0}`"),
   E7006("Failed to execute job: `{0}`"),
   E7007("Delay must be not null for job with scheduling type FIXED_DELAY: `{0}`"),
+  E7008("Monitoring job replacing results must run as the system user, remove executedBy: `{0}`"),
   E7010("Failed to validate job runtime: `{0}`"),
   E7020("Job queue does not exist: `{0}`"),
   E7021("Job queue already exist: `{0}`"),
@@ -566,7 +567,7 @@ public enum ErrorCode {
   E7153(
       "Query would compute `{0}` indicator values, more than the max of `{1}`. Remove dimensions or dimension items, or move dimensions to filters"),
   E7154(
-      "Analytics tables are out of date. Ask your administrator to run a full analytics tables update."),
+      "Invalid reference. Analytics tables may be outdated (full export might be required), or the column is invalid. Ask your administrator"),
   /* Analytics outliers */
 
   E7180(
@@ -646,6 +647,8 @@ public enum ErrorCode {
       "Aggregation type `{0}` is not supported by enrollment aggregate queries, specify `aggregationType` as one of COUNT, SUM, AVERAGE, MIN, MAX, STDDEV or VARIANCE"),
   E7268("Category `{0}` is not part of the category combination of program `{1}`"),
   E7269("Category option group set `{0}` is not supported in enrollment analytics"),
+  E7270(
+      "Date range `{0}` is not supported as a dimension in aggregate queries, use it as a filter instead"),
 
   /* Org unit analytics */
   E7300(Constants.AT_LEAST_ONE_ORGANISATION_UNIT_MUST_BE_SPECIFIED),

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022, University of Oslo
+ * Copyright (c) 2004-2026, University of Oslo
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,4 +102,42 @@ public interface ValidationResultService {
       boolean includeOrgUnitDescendants,
       Collection<ValidationRule> validationRules,
       Collection<Period> periods);
+
+  /**
+   * Persists the violations found by an analysis. A violation already persisted for the same rule,
+   * period, org unit, attribute option combo and day in the period keeps its row and notification
+   * state; its left and right side values are updated. Other violations are saved. Persisted
+   * violations that were not found are left unchanged.
+   *
+   * @param validationResults the violations found by the analysis
+   */
+  void upsertValidationResults(Collection<ValidationResult> validationResults);
+
+  /**
+   * Brings the persisted results of the given scope in line with the results of an analysis of that
+   * scope.
+   *
+   * <ul>
+   *   <li>Results are upserted as by {@link #upsertValidationResults(Collection)}. A violation that
+   *       was already notified for the same rule, period, org unit and attribute option combo on an
+   *       earlier day of the period keeps that notification state.
+   *   <li>If {@code removeResolved} is true, persisted results of the scope that the analysis did
+   *       not find are deleted: resolved violations, and earlier days of ongoing violations. Pass
+   *       false when the analysis was incomplete.
+   * </ul>
+   *
+   * @param orgUnit the root of the analysed org units, or null for all org units
+   * @param includeOrgUnitDescendants whether the descendants of {@code orgUnit} were analysed
+   * @param validationRules the analysed rules
+   * @param periods the analysed periods
+   * @param currentResults the violations found by the analysis
+   * @param removeResolved whether to delete persisted results that were not found
+   */
+  void replaceValidationResults(
+      OrganisationUnit orgUnit,
+      boolean includeOrgUnitDescendants,
+      Collection<ValidationRule> validationRules,
+      Collection<Period> periods,
+      Collection<ValidationResult> currentResults,
+      boolean removeResolved);
 }
