@@ -31,7 +31,6 @@ package org.hisp.dhis.query.planner;
 
 import javax.annotation.CheckForNull;
 import lombok.RequiredArgsConstructor;
-import org.hisp.dhis.common.PropertyPath;
 import org.hisp.dhis.query.Filter;
 import org.hisp.dhis.schema.Property;
 import org.hisp.dhis.schema.SchemaService;
@@ -73,10 +72,10 @@ public class RootCollectionFilters {
   public Class<?> itemType(Class<?> rootType, Filter filter, Property terminal) {
     if (!isEligibleTerminal(filter, terminal)) return null;
 
-    PropertyPath path = PropertyPath.of(filter.getPath());
-    if (path.length() != 2) return null;
+    String[] segments = filter.getPath().split("\\.");
+    if (segments.length != 2) return null;
 
-    Property collection = schemaService.getSchema(rootType).getProperty(path.head().toString());
+    Property collection = schemaService.getSchema(rootType).getProperty(segments[0]);
     if (collection == null || !collection.isCollection() || collection.isEmbeddedObject()) {
       return null;
     }
