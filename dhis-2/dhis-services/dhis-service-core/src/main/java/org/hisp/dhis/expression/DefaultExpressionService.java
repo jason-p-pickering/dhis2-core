@@ -212,6 +212,7 @@ public class DefaultExpressionService implements ExpressionService {
           .put(PERIOD_IN_YEAR, new ItemPeriodInYear())
           .put(PERIOD_OFFSET, new PeriodOffset())
           .put(SUB_EXPRESSION, new FunctionSubexpression())
+          .put(VR_BRACE, new DimItemValidationRule())
           .put(YEARLY_PERIOD_COUNT, new ItemYearlyPeriodCount())
           .put(YEAR_TO_DATE, new FunctionYearToDate())
           .build();
