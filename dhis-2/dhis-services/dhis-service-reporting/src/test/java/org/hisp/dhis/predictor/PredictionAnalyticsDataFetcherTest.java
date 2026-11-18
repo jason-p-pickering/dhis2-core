@@ -64,6 +64,7 @@ import org.hisp.dhis.program.ProgramIndicator;
 import org.hisp.dhis.system.grid.ListGrid;
 import org.hisp.dhis.test.TestBase;
 import org.hisp.dhis.trackedentity.TrackedEntityAttribute;
+import org.hisp.dhis.validation.ValidationRule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -582,6 +583,32 @@ class PredictionAnalyticsDataFetcherTest extends TestBase {
   }
 
   @Test
+  void testGetValuesForValidationRuleWithoutAttributeOptionCombo() {
+    ValidationRule rule = new ValidationRule();
+    rule.setUid("validRuleAA");
+    rule.setName("Rule A");
+
+    Grid grid = new ListGrid();
+    grid.addHeader(new GridHeader(PERIOD_DIM_ID, "Period", ValueType.TEXT, false, true));
+    grid.addHeader(new GridHeader(DATA_X_DIM_ID, "DimensionItem", ValueType.TEXT, false, true));
+    grid.addHeader(new GridHeader(ORGUNIT_DIM_ID, "OrganisationUnit", ValueType.TEXT, false, true));
+    grid.addHeader(new GridHeader("value", "Value", ValueType.NUMBER, false, true));
+    grid.addRow()
+        .addValue(periodA.getIsoDate())
+        .addValue(rule.getUid())
+        .addValue(orgUnitA.getUid())
+        .addValue(7);
+
+    when(analyticsService.getAggregatedDataValues(nonAocParamsFor(rule))).thenReturn(grid);
+
+    fetcher.init(periods, Set.of(rule));
+
+    assertContainsOnly(
+        List.of(new FoundDimensionItemValue(orgUnitA, periodA, null, null, rule, 7.0)),
+        fetcher.getValues(orgUnits));
+  }
+
+  @Test
   void testGetValuesEmpty() {
     fetcher.init(periods, Collections.emptySet());
 
@@ -620,6 +647,22 @@ class PredictionAnalyticsDataFetcherTest extends TestBase {
             .build();
 
     return argThat(p -> expected.equals(p) && List.of(item).equals(p.getAllDataDimensionItems()));
+  }
+
+  /** Makes the query parameters for an item fetched without attribute option combos. */
+  private DataQueryParams nonAocParamsFor(DimensionalItemObject item) {
+    DataQueryParams expected =
+        DataQueryParams.newBuilder()
+            .withPeriods(periods.stream().map(PeriodDimension::of).toList())
+            .withDataDimensionItems(List.of(item))
+            .withOrganisationUnits(orgUnits)
+            .build();
+
+    return argThat(
+        p ->
+            expected.equals(p)
+                && p.getDimension(ATTRIBUTEOPTIONCOMBO_DIM_ID) == null
+                && List.of(item).equals(p.getAllDataDimensionItems()));
   }
 
   /** Makes an empty grid as returned for items fetched by attribute option combo. */

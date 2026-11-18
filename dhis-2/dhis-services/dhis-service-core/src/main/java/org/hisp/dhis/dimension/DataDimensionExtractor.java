@@ -63,6 +63,7 @@ import org.hisp.dhis.program.ProgramTrackedEntityAttributeDimensionItem;
 import org.hisp.dhis.program.ProgramTrackedEntityAttributeOptionDimensionItem;
 import org.hisp.dhis.subexpression.SubexpressionDimensionItem;
 import org.hisp.dhis.trackedentity.TrackedEntityAttribute;
+import org.hisp.dhis.validation.ValidationRule;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -130,6 +131,10 @@ public class DataDimensionExtractor {
 
         case PROGRAM_INDICATOR:
           atomicIds.putValue(ProgramIndicator.class, id.getId0());
+          break;
+
+        case VALIDATION_RULE:
+          atomicIds.putValue(ValidationRule.class, id.getId0());
           break;
 
         case SUBEXPRESSION_DIMENSION_ITEM:
@@ -418,6 +423,11 @@ public class DataDimensionExtractor {
       case PROGRAM_INDICATOR:
         dimensionalItemObject =
             (ProgramIndicator) atomicObjects.getValue(ProgramIndicator.class, id.getId0());
+        break;
+
+      case VALIDATION_RULE:
+        dimensionalItemObject =
+            (ValidationRule) atomicObjects.getValue(ValidationRule.class, id.getId0());
         break;
 
       default:

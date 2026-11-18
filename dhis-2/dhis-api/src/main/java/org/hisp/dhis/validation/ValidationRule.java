@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.hisp.dhis.common.BaseDataDimensionalItemObject;
 import org.hisp.dhis.common.BaseIdentifiableObject;
+import org.hisp.dhis.common.DimensionItemType;
 import org.hisp.dhis.common.DxfNamespaces;
 import org.hisp.dhis.common.IdentifiableObject;
 import org.hisp.dhis.common.MetadataObject;
@@ -118,6 +119,12 @@ public class ValidationRule extends BaseDataDimensionalItemObject implements Met
   // -------------------------------------------------------------------------
   // Logic
   // -------------------------------------------------------------------------
+
+  @Override
+  @JsonProperty
+  public DimensionItemType getDimensionItemType() {
+    return DimensionItemType.VALIDATION_RULE;
+  }
 
   /**
    * Clears the left-side and right-side expressions. This can be useful, for example, before
