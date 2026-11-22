@@ -578,7 +578,6 @@ public enum ErrorCode {
   E7200(Constants.AT_LEAST_ONE_ORGANISATION_UNIT_MUST_BE_SPECIFIED),
   E7201("Dimensions cannot be specified more than once: `{0}`"),
   E7202("Query items cannot be specified more than once: `{0}`"),
-  E7203("Value dimension cannot also be specified as a dimension without a legend set"),
   E7204("Value dimension or aggregate data must be specified when aggregation type is specified"),
   E7205("Start and end date or at least one period must be specified"),
   E7206("Start date is after end date: `{0}`, `{1}`"),
@@ -636,8 +635,6 @@ public enum ErrorCode {
       "Dimension `{0}` is not supported for program stage `{1}`. Only event-level dimensions are supported for stage-specific scope"),
   E7259("Dimension `{0}` is not supported for a program without registration"),
   E7260("Dimension `{0}` must specify organisation units in an aggregate query"),
-  E7261(
-      "Dimension `{0}` does not support organisation units at different hierarchy levels in an aggregate query"),
   E7262("Sorting by `{0}` requires the `{1}` dimension"),
   E7264("Repeatable stage offset is not supported in `value`: `{0}`"),
   E7265("Value `{0}` has aggregation type NONE, specify an `aggregationType`"),
@@ -731,6 +728,7 @@ public enum ErrorCode {
       "Untimely data entry (already approved) for attribute option combo ${combo:{0}}, org unit ${unit:{1}} and periods: `${periods:{2}}`"),
   E8034("Data set deletion scope ID refers to a non-existing object: `${id:{0}}`"),
   E8035("Data set deletion scope ID is not a valid UID: `${id:{0}}`"),
+  E8036("Data value import error: ${error:{0}}"),
   // value level decoding and input issues
   E8100("Value #${index:{0}} period not defined in group or value: `${dv:{1}}`"),
   E8101("Value #${index:{0}} data set is required to decode category options: `${options:{1}}`"),
