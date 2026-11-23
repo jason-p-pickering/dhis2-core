@@ -47,7 +47,6 @@ import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM;
 
 import jakarta.annotation.PostConstruct;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -410,17 +409,13 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
   List<DataIntegrityIssue> getJobsRunningButNotExecuting() {
     if (dhisConfigurationProvider.isClusterEnabled()) return List.of();
     Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
-    Date serverStart = new Date(ManagementFactory.getRuntimeMXBean().getStartTime());
     List<DataIntegrityIssue> issues = new ArrayList<>();
     for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
       if (executing.contains(job.id())) continue;
       String comment =
           format(
-              "%s, started %s, last alive %s, server started %s",
-              job.type().name(),
-              formatDate(job.lastExecuted()),
-              formatDate(job.lastAlive()),
-              formatDate(serverStart));
+              "%s, started %s, last alive %s",
+              job.type().name(), formatDate(job.lastExecuted()), formatDate(job.lastAlive()));
       issues.add(new DataIntegrityIssue(job.id().getValue(), job.name(), comment, null));
     }
     return issues;
