@@ -40,6 +40,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -142,6 +143,12 @@ public class DefaultJobSchedulerLoopService implements JobSchedulerLoopService {
   @IndirectTransactional
   public JobEntry getNextInQueue(String queue, int fromPosition) {
     return jobConfigurationStore.getNextInQueue(queue, fromPosition);
+  }
+
+  @Nonnull
+  @Override
+  public Set<UID> getLocallyRunningJobIds() {
+    return Set.copyOf(recordingsById.keySet());
   }
 
   @CheckForNull

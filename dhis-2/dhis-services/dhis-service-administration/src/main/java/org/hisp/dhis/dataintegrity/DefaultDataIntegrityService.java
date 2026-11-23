@@ -47,6 +47,7 @@ import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM;
 
 import jakarta.annotation.PostConstruct;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -75,6 +76,7 @@ import org.hisp.dhis.antlr.ParserException;
 import org.hisp.dhis.cache.Cache;
 import org.hisp.dhis.cache.CacheProvider;
 import org.hisp.dhis.common.IdentifiableObject;
+import org.hisp.dhis.common.UID;
 import org.hisp.dhis.configuration.ServerBaseUrlValidator;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementService;
@@ -103,9 +105,14 @@ import org.hisp.dhis.programrule.ProgramRuleAction;
 import org.hisp.dhis.programrule.ProgramRuleActionService;
 import org.hisp.dhis.programrule.ProgramRuleVariable;
 import org.hisp.dhis.programrule.ProgramRuleVariableService;
+import org.hisp.dhis.scheduling.JobConfiguration;
+import org.hisp.dhis.scheduling.JobConfigurationStore;
+import org.hisp.dhis.scheduling.JobEntry;
 import org.hisp.dhis.scheduling.JobProgress;
+import org.hisp.dhis.scheduling.JobSchedulerLoopService;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
+import org.hisp.dhis.util.DateUtils;
 import org.hisp.dhis.validation.ValidationRule;
 import org.hisp.dhis.validation.ValidationRuleService;
 import org.springframework.stereotype.Service;
@@ -119,6 +126,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 @RequiredArgsConstructor
 public class DefaultDataIntegrityService implements DataIntegrityService {
+
+  /**
+   * A job marked as running for which this server shows no sign of life for this long, and which
+   * this server does not execute, is reported. The margin covers the moment between marking a job
+   * as running and starting to execute it.
+   */
+  private static final int JOB_NOT_ALIVE_SECONDS = 60;
+
   private static final String FORMULA_SEPARATOR = "#";
 
   private final I18nManager i18nManager;
@@ -152,6 +167,10 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
   private final SchemaService schemaService;
 
   private final DhisConfigurationProvider dhisConfigurationProvider;
+
+  private final JobConfigurationStore jobConfigurationStore;
+
+  private final JobSchedulerLoopService jobSchedulerLoopService;
 
   private Cache<DataIntegritySummary> summaryCache;
 
@@ -382,6 +401,35 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         .orElse(List.of());
   }
 
+  /**
+   * Reports jobs that are marked as running but that this server does not execute, for example
+   * because the server was restarted or crashed during the run. Such a job blocks every other job
+   * of its type until the stale-job timeout passes. In a cluster another server can execute the
+   * job, so the check reports nothing there.
+   */
+  List<DataIntegrityIssue> getJobsRunningButNotExecuting() {
+    if (dhisConfigurationProvider.isClusterEnabled()) return List.of();
+    Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
+    Date serverStart = new Date(ManagementFactory.getRuntimeMXBean().getStartTime());
+    List<DataIntegrityIssue> issues = new ArrayList<>();
+    for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
+      if (executing.contains(job.id())) continue;
+      String comment =
+          format(
+              "%s, started %s, last alive %s, server started %s",
+              job.type().name(),
+              formatDate(job.lastExecuted()),
+              formatDate(job.lastAlive()),
+              formatDate(serverStart));
+      issues.add(new DataIntegrityIssue(job.id().getValue(), job.name(), comment, null));
+    }
+    return issues;
+  }
+
+  private static String formatDate(Date date) {
+    return date == null ? "unknown" : DateUtils.toLongDateNoT(date);
+  }
+
   private void registerNonDatabaseIntegrityCheck(
       DataIntegrityCheckType type,
       Class<? extends IdentifiableObject> issueIdType,
@@ -515,6 +563,12 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         false,
         DataIntegritySeverity.SEVERE,
         this::getServerBaseUrlIssues);
+    registerNonDatabaseIntegrityCheck(
+        DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
+        JobConfiguration.class,
+        false,
+        DataIntegritySeverity.CRITICAL,
+        this::getJobsRunningButNotExecuting);
   }
 
   Set<String> addSQLChecksToFlattedReport() {
