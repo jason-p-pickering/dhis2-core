@@ -88,6 +88,7 @@ import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.Expression;
 import org.hisp.dhis.expression.ExpressionService;
 import org.hisp.dhis.expression.ExpressionValidationOutcome;
+import org.hisp.dhis.external.conf.ConfigurationKey;
 import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.LocationManager;
 import org.hisp.dhis.external.location.LocationManagerException;
@@ -417,7 +418,7 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
    *     restart, which the comment says explicitly because that is what admins need to know
    */
   List<DataIntegrityIssue> getJobsRunningButNotExecuting(Date serverStart) {
-    if (dhisConfigurationProvider.isClusterEnabled()) return List.of();
+    if (isMultiServer()) return List.of();
     Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
     List<DataIntegrityIssue> issues = new ArrayList<>();
     for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
@@ -435,6 +436,16 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
       issues.add(new DataIntegrityIssue(job.id().getValue(), job.name(), comment, null));
     }
     return issues;
+  }
+
+  /**
+   * Whether other servers may run jobs from the same database: a cluster ({@code cluster.members}
+   * and {@code cluster.hostname}) or Redis, which coordinates the job scheduler across servers. A
+   * single server that uses Redis only for caching also counts, so the check is never wrong there.
+   */
+  boolean isMultiServer() {
+    return dhisConfigurationProvider.isClusterEnabled()
+        || dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED);
   }
 
   private static String formatDate(Date date) {
@@ -574,12 +585,15 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         false,
         DataIntegritySeverity.SEVERE,
         this::getServerBaseUrlIssues);
-    registerNonDatabaseIntegrityCheck(
-        DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
-        JobConfiguration.class,
-        false,
-        DataIntegritySeverity.CRITICAL,
-        this::getJobsRunningButNotExecuting);
+    // only one server knows which jobs it runs; with several servers the check could not tell
+    if (!isMultiServer()) {
+      registerNonDatabaseIntegrityCheck(
+          DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
+          JobConfiguration.class,
+          false,
+          DataIntegritySeverity.CRITICAL,
+          this::getJobsRunningButNotExecuting);
+    }
   }
 
   Set<String> addSQLChecksToFlattedReport() {

@@ -78,6 +78,7 @@ import org.hisp.dhis.dataintegrity.DataIntegrityDetails.DataIntegrityIssue;
 import org.hisp.dhis.dataset.DataSet;
 import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.ExpressionService;
+import org.hisp.dhis.external.conf.ConfigurationKey;
 import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.DefaultLocationManager;
 import org.hisp.dhis.i18n.I18n;
@@ -586,6 +587,26 @@ class DataIntegrityServiceTest {
 
     assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
     verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_NotCheckedWithRedis() {
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+    verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_RegisteredOnlyOnSingleServer() {
+    when(i18nManager.getI18n(DataIntegrityService.class)).thenReturn(i18n);
+    when(i18n.getString(anyString(), anyString())).thenReturn("default");
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertFalse(
+        subject.getDataIntegrityChecks().stream()
+            .anyMatch(c -> c.getName().equals("job_configurations_running_not_executing")),
+        "with several servers the check is not offered at all");
   }
 
   private static JobEntry runningJob(String uid) {
