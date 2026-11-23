@@ -535,12 +535,27 @@ class DataIntegrityServiceTest {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(dead));
     when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
 
-    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting();
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(new Date());
 
     assertEquals(1, issues.size());
     assertEquals("dead1234567", issues.get(0).getId());
     assertEquals("Analytics", issues.get(0).getName());
-    assertTrue(issues.get(0).getComment().startsWith("ANALYTICS_TABLE, started "));
+    String comment = issues.get(0).getComment();
+    assertTrue(comment.startsWith("ANALYTICS_TABLE, started "), comment);
+    assertTrue(comment.contains(", before the server restarted at "), comment);
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_LastAliveAfterServerStart() {
+    JobEntry job = runningJob("gone1234567");
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(job));
+    when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
+    Date serverStart = new Date(System.currentTimeMillis() - 7_200_000);
+
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(serverStart);
+
+    assertEquals(1, issues.size());
+    assertTrue(issues.get(0).getComment().contains(", not run by this server (started "));
   }
 
   @Test
@@ -549,21 +564,21 @@ class DataIntegrityServiceTest {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(live));
     when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of(live.id()));
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
   }
 
   @Test
   void testJobsRunningButNotExecuting_NoJobWithoutSignOfLife() {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of());
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
   }
 
   @Test
   void testJobsRunningButNotExecuting_NotCheckedInCluster() {
     when(dhisConfigurationProvider.isClusterEnabled()).thenReturn(true);
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
     verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
   }
 

@@ -47,6 +47,8 @@ import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM;
 
 import jakarta.annotation.PostConstruct;
+import java.lang.management.ManagementFactory;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -111,7 +113,6 @@ import org.hisp.dhis.scheduling.JobProgress;
 import org.hisp.dhis.scheduling.JobSchedulerLoopService;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
-import org.hisp.dhis.util.DateUtils;
 import org.hisp.dhis.validation.ValidationRule;
 import org.hisp.dhis.validation.ValidationRuleService;
 import org.springframework.stereotype.Service;
@@ -407,22 +408,37 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
    * job, so the check reports nothing there.
    */
   List<DataIntegrityIssue> getJobsRunningButNotExecuting() {
+    return getJobsRunningButNotExecuting(
+        new Date(ManagementFactory.getRuntimeMXBean().getStartTime()));
+  }
+
+  /**
+   * @param serverStart when this server started; a job last alive before that was stopped by the
+   *     restart, which the comment says explicitly because that is what admins need to know
+   */
+  List<DataIntegrityIssue> getJobsRunningButNotExecuting(Date serverStart) {
     if (dhisConfigurationProvider.isClusterEnabled()) return List.of();
     Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
     List<DataIntegrityIssue> issues = new ArrayList<>();
     for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
       if (executing.contains(job.id())) continue;
+      boolean stoppedByRestart = job.lastAlive() != null && job.lastAlive().before(serverStart);
       String comment =
           format(
-              "%s, started %s, last alive %s",
-              job.type().name(), formatDate(job.lastExecuted()), formatDate(job.lastAlive()));
+              stoppedByRestart
+                  ? "%s, started %s, last alive %s, before the server restarted at %s"
+                  : "%s, started %s, last alive %s, not run by this server (started %s)",
+              job.type().name(),
+              formatDate(job.lastExecuted()),
+              formatDate(job.lastAlive()),
+              formatDate(serverStart));
       issues.add(new DataIntegrityIssue(job.id().getValue(), job.name(), comment, null));
     }
     return issues;
   }
 
   private static String formatDate(Date date) {
-    return date == null ? "unknown" : DateUtils.toLongDateNoT(date);
+    return date == null ? "unknown" : new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(date);
   }
 
   private void registerNonDatabaseIntegrityCheck(
