@@ -70,7 +70,9 @@ public enum DataIntegrityCheckType {
   PROGRAM_RULE_ACTIONS_WITHOUT_STAGE_ID,
 
   // System configuration
-  SERVER_BASE_URL_NOT_CONFIGURED;
+  SERVER_BASE_URL_NOT_CONFIGURED,
+
+  JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING;
 
   public String getName() {
     return name().toLowerCase();

@@ -47,6 +47,8 @@ import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM;
 
 import jakarta.annotation.PostConstruct;
+import java.lang.management.ManagementFactory;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -75,6 +77,7 @@ import org.hisp.dhis.antlr.ParserException;
 import org.hisp.dhis.cache.Cache;
 import org.hisp.dhis.cache.CacheProvider;
 import org.hisp.dhis.common.IdentifiableObject;
+import org.hisp.dhis.common.UID;
 import org.hisp.dhis.configuration.ServerBaseUrlValidator;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementService;
@@ -85,6 +88,7 @@ import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.Expression;
 import org.hisp.dhis.expression.ExpressionService;
 import org.hisp.dhis.expression.ExpressionValidationOutcome;
+import org.hisp.dhis.external.conf.ConfigurationKey;
 import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.LocationManager;
 import org.hisp.dhis.external.location.LocationManagerException;
@@ -103,7 +107,11 @@ import org.hisp.dhis.programrule.ProgramRuleAction;
 import org.hisp.dhis.programrule.ProgramRuleActionService;
 import org.hisp.dhis.programrule.ProgramRuleVariable;
 import org.hisp.dhis.programrule.ProgramRuleVariableService;
+import org.hisp.dhis.scheduling.JobConfiguration;
+import org.hisp.dhis.scheduling.JobConfigurationStore;
+import org.hisp.dhis.scheduling.JobEntry;
 import org.hisp.dhis.scheduling.JobProgress;
+import org.hisp.dhis.scheduling.JobSchedulerLoopService;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
 import org.hisp.dhis.validation.ValidationRule;
@@ -119,6 +127,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 @RequiredArgsConstructor
 public class DefaultDataIntegrityService implements DataIntegrityService {
+
+  /**
+   * A job marked as running for which this server shows no sign of life for this long, and which
+   * this server does not execute, is reported. The margin covers the moment between marking a job
+   * as running and starting to execute it.
+   */
+  private static final int JOB_NOT_ALIVE_SECONDS = 60;
+
   private static final String FORMULA_SEPARATOR = "#";
 
   private final I18nManager i18nManager;
@@ -152,6 +168,10 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
   private final SchemaService schemaService;
 
   private final DhisConfigurationProvider dhisConfigurationProvider;
+
+  private final JobConfigurationStore jobConfigurationStore;
+
+  private final JobSchedulerLoopService jobSchedulerLoopService;
 
   private Cache<DataIntegritySummary> summaryCache;
 
@@ -382,6 +402,56 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         .orElse(List.of());
   }
 
+  /**
+   * Reports jobs that are marked as running but that this server does not execute, for example
+   * because the server was restarted or crashed during the run. Such a job blocks every other job
+   * of its type until the stale-job timeout passes. In a cluster another server can execute the
+   * job, so the check reports nothing there.
+   */
+  List<DataIntegrityIssue> getJobsRunningButNotExecuting() {
+    return getJobsRunningButNotExecuting(
+        new Date(ManagementFactory.getRuntimeMXBean().getStartTime()));
+  }
+
+  /**
+   * @param serverStart when this server started; a job last alive before that was stopped by the
+   *     restart, which the comment says explicitly because that is what admins need to know
+   */
+  List<DataIntegrityIssue> getJobsRunningButNotExecuting(Date serverStart) {
+    if (isMultiServer()) return List.of();
+    Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
+    List<DataIntegrityIssue> issues = new ArrayList<>();
+    for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
+      if (executing.contains(job.id())) continue;
+      boolean stoppedByRestart = job.lastAlive() != null && job.lastAlive().before(serverStart);
+      String comment =
+          format(
+              stoppedByRestart
+                  ? "%s, started %s, last progress %s, server restarted at %s"
+                  : "%s, started %s, last progress %s, not in this server's list of running jobs (server started %s)",
+              job.type().name(),
+              formatDate(job.lastExecuted()),
+              formatDate(job.lastAlive()),
+              formatDate(serverStart));
+      issues.add(new DataIntegrityIssue(job.id().getValue(), job.name(), comment, null));
+    }
+    return issues;
+  }
+
+  /**
+   * Whether other servers may run jobs from the same database: a cluster ({@code cluster.members}
+   * and {@code cluster.hostname}) or Redis, which coordinates the job scheduler across servers. A
+   * single server that uses Redis only for caching also counts, so the check is never wrong there.
+   */
+  boolean isMultiServer() {
+    return dhisConfigurationProvider.isClusterEnabled()
+        || dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED);
+  }
+
+  private static String formatDate(Date date) {
+    return date == null ? "unknown" : new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(date);
+  }
+
   private void registerNonDatabaseIntegrityCheck(
       DataIntegrityCheckType type,
       Class<? extends IdentifiableObject> issueIdType,
@@ -515,6 +585,15 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         false,
         DataIntegritySeverity.SEVERE,
         this::getServerBaseUrlIssues);
+    // only one server knows which jobs it runs; with several servers the check could not tell
+    if (!isMultiServer()) {
+      registerNonDatabaseIntegrityCheck(
+          DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
+          JobConfiguration.class,
+          false,
+          DataIntegritySeverity.CRITICAL,
+          this::getJobsRunningButNotExecuting);
+    }
   }
 
   Set<String> addSQLChecksToFlattedReport() {

@@ -30,6 +30,7 @@
 package org.hisp.dhis.scheduling;
 
 import java.util.List;
+import java.util.Set;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import org.hisp.dhis.common.UID;
@@ -78,6 +79,14 @@ public interface JobSchedulerLoopService {
 
   @CheckForNull
   JobEntry getNextInQueue(String queue, int fromPosition);
+
+  /**
+   * @return the IDs of the jobs this server is executing right now. A job in status {@link
+   *     JobStatus#RUNNING} that is not in this set is not executed by this server; on a server that
+   *     is not part of a cluster it is not executed at all.
+   */
+  @Nonnull
+  Set<UID> getLocallyRunningJobIds();
 
   /**
    * A successful update means the DB was updated and the state flipped from {@link

@@ -47,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
@@ -57,8 +58,10 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -66,6 +69,7 @@ import org.hisp.dhis.analytics.AggregationType;
 import org.hisp.dhis.antlr.ParserException;
 import org.hisp.dhis.cache.CacheProvider;
 import org.hisp.dhis.category.CategoryService;
+import org.hisp.dhis.common.UID;
 import org.hisp.dhis.dataelement.DataElement;
 import org.hisp.dhis.dataelement.DataElementGroup;
 import org.hisp.dhis.dataelement.DataElementService;
@@ -74,6 +78,8 @@ import org.hisp.dhis.dataintegrity.DataIntegrityDetails.DataIntegrityIssue;
 import org.hisp.dhis.dataset.DataSet;
 import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.ExpressionService;
+import org.hisp.dhis.external.conf.ConfigurationKey;
+import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.DefaultLocationManager;
 import org.hisp.dhis.i18n.I18n;
 import org.hisp.dhis.i18n.I18nManager;
@@ -97,6 +103,12 @@ import org.hisp.dhis.programrule.ProgramRuleActionService;
 import org.hisp.dhis.programrule.ProgramRuleService;
 import org.hisp.dhis.programrule.ProgramRuleVariable;
 import org.hisp.dhis.programrule.ProgramRuleVariableService;
+import org.hisp.dhis.scheduling.JobConfigurationStore;
+import org.hisp.dhis.scheduling.JobEntry;
+import org.hisp.dhis.scheduling.JobSchedulerLoopService;
+import org.hisp.dhis.scheduling.JobStatus;
+import org.hisp.dhis.scheduling.JobType;
+import org.hisp.dhis.scheduling.SchedulingType;
 import org.hisp.dhis.schema.SchemaService;
 import org.hisp.dhis.test.random.BeanRandomizer;
 import org.hisp.dhis.validation.ValidationRuleService;
@@ -157,6 +169,12 @@ class DataIntegrityServiceTest {
   @Mock private ProgramRuleVariableService programRuleVariableService;
 
   @Mock private ProgramRuleActionService programRuleActionService;
+
+  @Mock private DhisConfigurationProvider dhisConfigurationProvider;
+
+  @Mock private JobConfigurationStore jobConfigurationStore;
+
+  @Mock private JobSchedulerLoopService jobSchedulerLoopService;
 
   @InjectMocks private DefaultDataIntegrityService subject;
 
@@ -510,6 +528,104 @@ class DataIntegrityServiceTest {
     when(i18n.getString(contains("severity"), eq("WARNING"))).thenReturn("WARNING");
     Collection<DataIntegrityCheck> dataIntegrityChecks = subject.getDataIntegrityChecks();
     assertFalse(dataIntegrityChecks.isEmpty());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_ServerRestartedDuringRun() {
+    JobEntry dead = runningJob("dead1234567");
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(dead));
+    when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
+
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(new Date());
+
+    assertEquals(1, issues.size());
+    assertEquals("dead1234567", issues.get(0).getId());
+    assertEquals("Analytics", issues.get(0).getName());
+    String comment = issues.get(0).getComment();
+    assertTrue(comment.startsWith("ANALYTICS_TABLE, started "), comment);
+    assertTrue(
+        comment.contains(", last progress ") && comment.contains(", server restarted at "),
+        comment);
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_LastAliveAfterServerStart() {
+    JobEntry job = runningJob("gone1234567");
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(job));
+    when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
+    Date serverStart = new Date(System.currentTimeMillis() - 7_200_000);
+
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(serverStart);
+
+    assertEquals(1, issues.size());
+    assertTrue(
+        issues
+            .get(0)
+            .getComment()
+            .contains(", not in this server's list of running jobs (server started "));
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_LongStepOfLiveRun() {
+    JobEntry live = runningJob("live1234567");
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(live));
+    when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of(live.id()));
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_NoJobWithoutSignOfLife() {
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of());
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_NotCheckedInCluster() {
+    when(dhisConfigurationProvider.isClusterEnabled()).thenReturn(true);
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+    verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_NotCheckedWithRedis() {
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+    verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_RegisteredOnlyOnSingleServer() {
+    when(i18nManager.getI18n(DataIntegrityService.class)).thenReturn(i18n);
+    when(i18n.getString(anyString(), anyString())).thenReturn("default");
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertFalse(
+        subject.getDataIntegrityChecks().stream()
+            .anyMatch(c -> c.getName().equals("job_configurations_running_not_executing")),
+        "with several servers the check is not offered at all");
+  }
+
+  private static JobEntry runningJob(String uid) {
+    Date started = new Date(System.currentTimeMillis() - 3_600_000);
+    return new JobEntry(
+        UID.of(uid),
+        JobType.ANALYTICS_TABLE,
+        SchedulingType.ONCE_ASAP,
+        "Analytics",
+        JobStatus.RUNNING,
+        null,
+        null,
+        null,
+        started,
+        null,
+        started,
+        null,
+        null,
+        null);
   }
 
   private Map<String, DataElement> createRandomDataElements(int quantity, String uidSeed) {
