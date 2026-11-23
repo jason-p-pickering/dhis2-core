@@ -78,6 +78,7 @@ import org.hisp.dhis.dataintegrity.DataIntegrityDetails.DataIntegrityIssue;
 import org.hisp.dhis.dataset.DataSet;
 import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.ExpressionService;
+import org.hisp.dhis.external.conf.ConfigurationKey;
 import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.DefaultLocationManager;
 import org.hisp.dhis.i18n.I18n;
@@ -535,12 +536,33 @@ class DataIntegrityServiceTest {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(dead));
     when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
 
-    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting();
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(new Date());
 
     assertEquals(1, issues.size());
     assertEquals("dead1234567", issues.get(0).getId());
     assertEquals("Analytics", issues.get(0).getName());
-    assertTrue(issues.get(0).getComment().startsWith("ANALYTICS_TABLE, started "));
+    String comment = issues.get(0).getComment();
+    assertTrue(comment.startsWith("ANALYTICS_TABLE, started "), comment);
+    assertTrue(
+        comment.contains(", last progress ") && comment.contains(", server restarted at "),
+        comment);
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_LastAliveAfterServerStart() {
+    JobEntry job = runningJob("gone1234567");
+    when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(job));
+    when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of());
+    Date serverStart = new Date(System.currentTimeMillis() - 7_200_000);
+
+    List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(serverStart);
+
+    assertEquals(1, issues.size());
+    assertTrue(
+        issues
+            .get(0)
+            .getComment()
+            .contains(", not in this server's list of running jobs (server started "));
   }
 
   @Test
@@ -549,22 +571,42 @@ class DataIntegrityServiceTest {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of(live));
     when(jobSchedulerLoopService.getLocallyRunningJobIds()).thenReturn(Set.of(live.id()));
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
   }
 
   @Test
   void testJobsRunningButNotExecuting_NoJobWithoutSignOfLife() {
     when(jobConfigurationStore.getStaleConfigurations(60)).thenReturn(List.of());
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
   }
 
   @Test
   void testJobsRunningButNotExecuting_NotCheckedInCluster() {
     when(dhisConfigurationProvider.isClusterEnabled()).thenReturn(true);
 
-    assertTrue(subject.getJobsRunningButNotExecuting().isEmpty());
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
     verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_NotCheckedWithRedis() {
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertTrue(subject.getJobsRunningButNotExecuting(new Date()).isEmpty());
+    verify(jobConfigurationStore, times(0)).getStaleConfigurations(anyInt());
+  }
+
+  @Test
+  void testJobsRunningButNotExecuting_RegisteredOnlyOnSingleServer() {
+    when(i18nManager.getI18n(DataIntegrityService.class)).thenReturn(i18n);
+    when(i18n.getString(anyString(), anyString())).thenReturn("default");
+    when(dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED)).thenReturn(true);
+
+    assertFalse(
+        subject.getDataIntegrityChecks().stream()
+            .anyMatch(c -> c.getName().equals("job_configurations_running_not_executing")),
+        "with several servers the check is not offered at all");
   }
 
   private static JobEntry runningJob(String uid) {

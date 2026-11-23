@@ -47,6 +47,7 @@ import static org.hisp.dhis.expression.ParseType.VALIDATION_RULE_EXPRESSION;
 import static org.hisp.dhis.scheduling.JobProgress.FailurePolicy.SKIP_ITEM;
 
 import java.lang.management.ManagementFactory;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -86,6 +87,7 @@ import org.hisp.dhis.dataset.DataSetService;
 import org.hisp.dhis.expression.Expression;
 import org.hisp.dhis.expression.ExpressionService;
 import org.hisp.dhis.expression.ExpressionValidationOutcome;
+import org.hisp.dhis.external.conf.ConfigurationKey;
 import org.hisp.dhis.external.conf.DhisConfigurationProvider;
 import org.hisp.dhis.external.location.LocationManager;
 import org.hisp.dhis.external.location.LocationManagerException;
@@ -111,7 +113,6 @@ import org.hisp.dhis.scheduling.JobProgress;
 import org.hisp.dhis.scheduling.JobSchedulerLoopService;
 import org.hisp.dhis.schema.Schema;
 import org.hisp.dhis.schema.SchemaService;
-import org.hisp.dhis.util.DateUtils;
 import org.hisp.dhis.validation.ValidationRule;
 import org.hisp.dhis.validation.ValidationRuleService;
 import org.springframework.stereotype.Service;
@@ -396,15 +397,26 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
    * job, so the check reports nothing there.
    */
   List<DataIntegrityIssue> getJobsRunningButNotExecuting() {
-    if (dhisConfigurationProvider.isClusterEnabled()) return List.of();
+    return getJobsRunningButNotExecuting(
+        new Date(ManagementFactory.getRuntimeMXBean().getStartTime()));
+  }
+
+  /**
+   * @param serverStart when this server started; a job last alive before that was stopped by the
+   *     restart, which the comment says explicitly because that is what admins need to know
+   */
+  List<DataIntegrityIssue> getJobsRunningButNotExecuting(Date serverStart) {
+    if (isMultiServer()) return List.of();
     Set<UID> executing = jobSchedulerLoopService.getLocallyRunningJobIds();
-    Date serverStart = new Date(ManagementFactory.getRuntimeMXBean().getStartTime());
     List<DataIntegrityIssue> issues = new ArrayList<>();
     for (JobEntry job : jobConfigurationStore.getStaleConfigurations(JOB_NOT_ALIVE_SECONDS)) {
       if (executing.contains(job.id())) continue;
+      boolean stoppedByRestart = job.lastAlive() != null && job.lastAlive().before(serverStart);
       String comment =
           format(
-              "%s, started %s, last alive %s, server started %s",
+              stoppedByRestart
+                  ? "%s, started %s, last progress %s, server restarted at %s"
+                  : "%s, started %s, last progress %s, not in this server's list of running jobs (server started %s)",
               job.type().name(),
               formatDate(job.lastExecuted()),
               formatDate(job.lastAlive()),
@@ -414,8 +426,18 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
     return issues;
   }
 
+  /**
+   * Whether other servers may run jobs from the same database: a cluster ({@code cluster.members}
+   * and {@code cluster.hostname}) or Redis, which coordinates the job scheduler across servers. A
+   * single server that uses Redis only for caching also counts, so the check is never wrong there.
+   */
+  boolean isMultiServer() {
+    return dhisConfigurationProvider.isClusterEnabled()
+        || dhisConfigurationProvider.isEnabled(ConfigurationKey.REDIS_ENABLED);
+  }
+
   private static String formatDate(Date date) {
-    return date == null ? "unknown" : DateUtils.toLongDateNoT(date);
+    return date == null ? "unknown" : new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(date);
   }
 
   private void registerNonDatabaseIntegrityCheck(
@@ -531,12 +553,15 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
         DataIntegrityCheckType.PROGRAM_RULE_ACTIONS_WITHOUT_STAGE_ID,
         ProgramRule.class,
         this::getProgramRuleActionsWithNoProgramStageId);
-    registerNonDatabaseIntegrityCheck(
-        DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
-        JobConfiguration.class,
-        false,
-        DataIntegritySeverity.CRITICAL,
-        this::getJobsRunningButNotExecuting);
+    // only one server knows which jobs it runs; with several servers the check could not tell
+    if (!isMultiServer()) {
+      registerNonDatabaseIntegrityCheck(
+          DataIntegrityCheckType.JOB_CONFIGURATIONS_RUNNING_NOT_EXECUTING,
+          JobConfiguration.class,
+          false,
+          DataIntegritySeverity.CRITICAL,
+          this::getJobsRunningButNotExecuting);
+    }
   }
 
   Set<String> addSQLChecksToFlattedReport() {

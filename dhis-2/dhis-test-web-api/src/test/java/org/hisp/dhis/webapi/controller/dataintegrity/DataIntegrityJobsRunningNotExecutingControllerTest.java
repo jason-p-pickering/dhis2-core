@@ -86,7 +86,8 @@ class DataIntegrityJobsRunningNotExecutingControllerTest
     JsonDataIntegrityCheck check = checks.get(0);
     assertEquals(CHECK, check.getName());
     assertEquals("JCRNE", check.getCode());
-    assertEquals("Jobs marked as running that this server does not run", check.getDisplayName());
+    assertEquals(
+        "Jobs marked as running that this server has no record of running", check.getDisplayName());
     assertEquals("Job scheduler", check.getSection());
     assertEquals(DataIntegritySeverity.CRITICAL, check.getSeverity());
     assertTrue(check.getIsProgrammatic());
