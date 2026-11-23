@@ -426,8 +426,8 @@ public class DefaultDataIntegrityService implements DataIntegrityService {
       String comment =
           format(
               stoppedByRestart
-                  ? "%s, started %s, last alive %s, before the server restarted at %s"
-                  : "%s, started %s, last alive %s, not run by this server (started %s)",
+                  ? "%s, started %s, last progress %s, server restarted at %s"
+                  : "%s, started %s, last progress %s, not in this server's list of running jobs (server started %s)",
               job.type().name(),
               formatDate(job.lastExecuted()),
               formatDate(job.lastAlive()),

@@ -542,7 +542,9 @@ class DataIntegrityServiceTest {
     assertEquals("Analytics", issues.get(0).getName());
     String comment = issues.get(0).getComment();
     assertTrue(comment.startsWith("ANALYTICS_TABLE, started "), comment);
-    assertTrue(comment.contains(", before the server restarted at "), comment);
+    assertTrue(
+        comment.contains(", last progress ") && comment.contains(", server restarted at "),
+        comment);
   }
 
   @Test
@@ -555,7 +557,11 @@ class DataIntegrityServiceTest {
     List<DataIntegrityIssue> issues = subject.getJobsRunningButNotExecuting(serverStart);
 
     assertEquals(1, issues.size());
-    assertTrue(issues.get(0).getComment().contains(", not run by this server (started "));
+    assertTrue(
+        issues
+            .get(0)
+            .getComment()
+            .contains(", not in this server's list of running jobs (server started "));
   }
 
   @Test
